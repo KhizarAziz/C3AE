@@ -7,36 +7,38 @@ import numpy as np
 import logging
 from sklearn.model_selection import train_test_split
 
-
 '''
-    基础的数据处理基类:
-         现在输入的数据必须满足pandas的输入格式, 各自实现输入对应接口
-         输出统一成pandas的feather格式
-    主要是方便标注后台的数据能够顺利的接入
+Basic data processing base class:
+         The data entered must meet the pandas input format, and each implements the corresponding input interface
+         The output is unified into pandas feather format
+    Mainly to facilitate the smooth access of the data in the background
 '''
 
 class BaseProc:
-
     def __init__(self, name, data_dir, output_dir, heads, overwrite=False, tf_dir="../data/", sample_rate=0.1):
+        
         '''
             @name: proc name
             @data_dir: 预处理数据目录
             @output_dir: 输出目录
             @heads: 数据titles
         '''
-        self.data_dir = data_dir
-        self.name = name
-        self.output_dir = output_dir
-        self.heads = heads
-        self.dataframe = pd.DataFrame(columns=self.heads)
-        self.overwrite = overwrite
-        self.tf_dir = tf_dir
+        self.name = name # wiki
+        self.data_dir = data_dir # ./dataset/wiki_crop
+        self.output_dir = output_dir # ./dataset/data/
+        self.heads = heads #  ["age", "gender", "image", "org_box", "trible_box", "landmarks", "roll", "yaw", "pitch"]
+        self.overwrite = overwrite # false
+        self.tf_dir = tf_dir # ../data/
+        self.sample_rate = sample_rate # 0.1
+        self.dataframe = pd.DataFrame(columns=self.heads) # ["age", "gender", "image", "org_box", "trible_box", "landmarks", "roll", "yaw", "pitch"]
         self.can_run = True
-        self.sample_rate = sample_rate
+        print('serilize.py BaseProc __init__ ends')
 
     def replica_check(self):
         '''
-            检查重复任务
+            Check for repetitive tasks
+            checking for some file names in putput dir, if they already exist
+            then return false, else true
         '''
         if self.overwrite:
              return True
@@ -47,15 +49,19 @@ class BaseProc:
         return True
 
     def process(self, *args, **kwargs):
-        logging.info("name:%s"%self.name)
+        print('BaseProc process starts')
         self.can_run = self.replica_check()
         if not self.can_run:
-            logging.info("已存在重复文件则不需要重新处理")
+            print ('if not self.can_run ')
+            return None
+            logging.info("Duplicate files do not need to be processed again")
             self.reload_data()
         else:
+            print ('now calling _process ')
             self._process(*args, **kwargs)
             self.save()
-       
+        print('if else ends')
+        return None
         self.dataframe = self.dataframe.dropna(axis=0)
         self.rectify_data()
         self.transtf_record()
@@ -69,7 +75,7 @@ class BaseProc:
 
     def reload_data(self):
         '''
-           重新加载历史数据
+           Reload historical data
         '''
         import feather
         dataset = pd.DataFrame(columns=self.heads)
@@ -85,6 +91,7 @@ class BaseProc:
 
 
     def _process(self, *args, **kwargs):
+        print('_process in BaseProc')
         return NotImplemented
 
     def save(self, chunkSize=5000):
