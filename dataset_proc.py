@@ -62,9 +62,9 @@ MTCNN_DETECT = MtcnnDetector(model_folder=None, ctx=mx.cpu(0), num_worker=1, min
 class ProfileProc(BaseProc):
 
     def __init__(self, name, data_dir, output_dir, overwrite=False, tf_dir="../data/", sample_rate=0.25, extra_padding=0):
+        print('ProfileProc init ends')
         BaseProc.__init__(self, name, data_dir, output_dir, COLUMS, overwrite, tf_dir, sample_rate)
         self.extra_padding = extra_padding
-        print('ProfileProc init ends')
 
     def _trans2tf_record(self, dataframe, trunck_num, sub_dir="train"):
         logging.info("not implemented %s"%sub_dir)
@@ -72,9 +72,9 @@ class ProfileProc(BaseProc):
 class WikiProc(ProfileProc):
     # 0 for female and 1 for male
     def __init__(self, data_dir, output_dir, mat_file="wiki.mat", *args, **kwargs):
+        print('WikiProc __init__ start')
         ProfileProc.__init__(self, "wiki", data_dir, output_dir, *args, **kwargs)
         self.mat_file=mat_file
-        print('WikiProc __init__ end')
 
     def _process(self, nums=-1):
         # path of meta.mat file in WIKI
@@ -87,7 +87,7 @@ class WikiProc(ProfileProc):
         full_path = [os.path.abspath(os.path.join(self.data_dir, p[0])) for p in meta[self.name][0, 0]["full_path"][0][:nums]]
         dob = meta[self.name][0, 0]["dob"][0][:nums]  # Matlab serial date number
         mat_gender = meta[self.name][0, 0]["gender"][0][:nums]
-         print(len(full_path),len(dob),len(mat_gender))
+        print(len(full_path),len(dob),len(mat_gender))
         return None
         photo_taken = meta[self.name][0, 0]["photo_taken"][0][:nums]  # year
         face_score = meta[self.name][0, 0]["face_score"][0][:nums]
@@ -187,7 +187,7 @@ def test_align():
      print(pitch, yaw, roll)
      cv2.imwrite("test.jpg", crops[0])
 
-if __name__ == "__main__":    
+if __name__ == "__main__":
     input_path = './dataset/wiki_crop'
     dest = './dataset/data/'
     source = 'wiki'

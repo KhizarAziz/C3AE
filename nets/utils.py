@@ -11,6 +11,7 @@ import tensorflow as tf
 from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import Callback
 from tensorflow.keras.layers import Layer
+import matplotlib.pyplot as plt
 
 #COLUMS = ["age", "gender", "image", "width", "height", "source", "md5"]
 COLUMS = ["age", "gender", "image", "org_box", "trible_box", "landmarks", "roll", "yaw", "pitch"]
@@ -184,9 +185,10 @@ def focal_loss(classes_num, gamma=2., alpha=.25, e=0.1):
 
 def image_transform(row, seed=100, contrast=(0.5, 2.5), bright=(-50, 50), rotation=(-15, 15), dropout=0., shape=(64, 64), is_training=True):
     (idx, row) = row[0], row[1]
-    img = np.fromstring(row["image"], np.uint8)
-    img = cv2.imdecode(img, cv2.IMREAD_COLOR)
+    # img = np.fromstring(row["image"], np.uint8)
+    # img = cv2.imdecode(img, cv2.IMREAD_COLOR)
     #cv2.imwrite("%s_%s__.jpg"%(row.age, row.gender), img)
+    img = cv2.imread(row['imgPath'])
 
     if is_training:
         img = random_erasing(img, dropout)
@@ -194,12 +196,13 @@ def image_transform(row, seed=100, contrast=(0.5, 2.5), bright=(-50, 50), rotati
     cascad_imgs, padding = [], 200
     new_bd_img = cv2.copyMakeBorder(img, padding, padding, padding, padding, cv2.BORDER_CONSTANT)
     height, width = img.shape[:2]
-    for bbox in np.loads(row.trible_box, encoding="bytes"):
-        h_min, w_min = bbox[0]
-        h_max, w_max = bbox[1]
-        # cv2.rectangle(img, (h_min, w_min), (h_max, w_max), (0,0,255), 2)
-        # cascad_imgs.append(cv2.resize(new_bd_img[max(w_min+padding, 0):min(w_max+padding, width), max(h_min+padding, 0): min(h_max+padding, height)], shape))
-        cascad_imgs.append(cv2.resize(new_bd_img[w_min+padding:w_max+padding, h_min+padding: h_max+padding,:], shape))
+    cascad_imgs.append(new_bd_img)
+    # for bbox in np.loads(row.trible_box, encoding="bytes"):
+    #     h_min, w_min = bbox[0]
+    #     h_max, w_max = bbox[1]
+    #     # cv2.rectangle(img, (h_min, w_min), (h_max, w_max), (0,0,255), 2)
+    #     # cascad_imgs.append(cv2.resize(new_bd_img[max(w_min+padding, 0):min(w_max+padding, width), max(h_min+padding, 0): min(h_max+padding, height)], shape))
+        # cascad_imgs.append(cv2.resize(new_bd_img[w_min+padding:w_max+padding, h_min+padding: h_max+padding,:], shape))
     ## if you want check data, and then you can remove these marks
     #if idx > 10000:
     #    cv2.imwrite("%s_%s_%s.jpg"%(row.age, row.gender, idx), cascad_imgs[2])
@@ -306,10 +309,13 @@ def age_data_generator(dataframe, batch_size=32, category=12, interval=10, is_tr
         idxs = np.random.permutation(all_nums)
         start = 0
         while start + batch_size < all_nums:
-            candis = dataframe.ix[list(idxs[start:start+batch_size])]
+            candis = dataframe.iloc[list(idxs[start:start+batch_size])]
             imgs = np.array([image_transform(x, is_training=is_training, dropout=dropout) for x in candis.iterrows()])
             out2 = [candis.age.to_numpy(), np.array([two_point(x, category, interval) for x in candis.age.to_numpy()])]
-            yield [imgs[:,0], imgs[:,1], imgs[:,2]], out2
+            # print(len(imgs),imgs[0])
+            plt.imshow(imgs[0].shape)
+            # yielding 3 different sized images i.e red/Green/blue Box(In paper)...  as mentioned in paper that input is in shape of 3 images
+            # yield [imgs[:,0], imgs[:,1], imgs[:,2]], out2
             start += batch_size
 
 if __name__ == "__main__":
