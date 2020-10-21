@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from scipy.io import loadmat
 from pathlib import Path
 from datetime import datetime
+from mtcnn import MTCNN
 
 
 # load dataset
@@ -12,15 +13,18 @@ from datetime import datetime
 # save dataset as pandas,feather & imencode for size efficiency
 
 Dataset_DF = pd.DataFrame(columns=["age", "gender", "image", "org_box", "trible_box", "landmarks", "roll", "yaw", "pitch"])
+detector = MTCNN()
 
 class Process_WIKI_IMDB():
   
-  def __init__(self,base_path,dataset_name):
+  def __init__(self,base_path,dataset_name,extra_padding):
     #init meta.mat file
     self.dataset_name = dataset_name
     meta_file_name = dataset_name+'.mat'
     self.base_path = Path(base_path)
     self.meta_file_path = self.base_path.joinpath(meta_file_name)
+
+    self.extra_padding = extra_padding
 
   def meta_to_csv(self,dataset_name):
     # make list of all columns in meta.mat file
@@ -34,23 +38,41 @@ class Process_WIKI_IMDB():
     age = [self.calculate_age(dob[i],photo_taken[i] ) for i in range(len(dob))] # calculate age using dob and taken date
     # make a dataframe dataset
     Dataset_DF = pd.DataFrame({"full_path": full_path, "age": age, "gender": mat_gender, "second_face_score": second_face_score, "face_score": face_score})
+    # Completing image paths from root to image
+    Dataset_DF['full_path'] = str(self.base_path)+'/'+Dataset_DF['full_path']
     # save dataframe as csv
     Dataset_DF.to_csv(self.base_path.joinpath(self.dataset_name+'.csv'),index=False)
 
+  def detect_face_box_lm(self,image):
+    facejson = detector.detect_faces(image)
 
-  def crop_and_transform_images(self, dataframe):
+    if len(facejson) > 1:
+      # more than 1 face... do something
+      return None
+    
+    for current_face_json in facejson:
+      bounds = json['box']
+      keypoints = json['keypoints']
 
-    for index,row in dataframe.iterrow():
+    bounds, lmarks = ret
+    if only_one and len(bounds) > 1:
+        print("!!!!!,", bounds, lmarks)
+        raise Exception("more than one face %s"%image_path)
+    return ret
+
+  def crop_and_transform_images(self):
+    meta_dataframe = pd.read_csv(self.base_path.joinpath(self.dataset_name+'.csv')
+    
+    #filter out where second face != null (image have 2 faces)
+    meta_dataframe = meta_dataframe[meta_dataframe.second_face_score.isna()]
+
+    for index,series in meta_dataframe.iterrow():
       # clear multiple faces
       image_path = series.full_path
       try:
-          print(image_path)
           image = cv2.imread(image_path, cv2.IMREAD_COLOR)
-          if self.extra_padding:
-              extra_padding = self.extra_padding
-              image = cv2.copyMakeBorder(image, extra_padding, extra_padding, extra_padding, extra_padding, cv2.BORDER_CONSTANT)
-          if not np.isnan(series.second_face_score):
-              raise Exception("secend face is not None~---%s~-%s- %s"%(series.name, series.age, image_path))
+          image = cv2.copyMakeBorder(image, self.extra_padding, self.extra_padding, self.extra_padding, self.extra_padding, cv2.BORDER_CONSTANT)
+
           bounds, lmarks = gen_face(detector, image, image_path)
           crops = detector.extract_image_chips(image, lmarks, padding=0.4)  # aligned face with padding 0.4 in papper
           if len(crops) == 0:
@@ -94,9 +116,14 @@ if __name__ == "__main__":
   # define all parameters here
   dataset_directory_path = '/content/C3AE/dataset/wiki_crop'
   dataset_name = 'wiki' # different dataset name means different sequence for loading etc
+
+  # image transform params (if require)
+  extra_padding = 0
+
   if dataset_name == 'wiki' or dataset_name == 'imdb': # because structure is same
     dataset_class_ref_object = Process_WIKI_IMDB(dataset_directory_path,dataset_name)
     dataset_class_ref_object.meta_to_csv(dataset_name) # convert meta.mat to meta.csv
+    dataset_class_ref_object.crop_and_transform_images()
     # call wiki convert meta.mat to df.csv
     # load all images
     # call process all images
