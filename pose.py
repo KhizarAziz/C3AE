@@ -2,7 +2,7 @@ import os
 import cv2
 import numpy as np
 import math
-from detect.mx_mtcnn.mtcnn_detector import MtcnnDetector
+
 
 def quaterniondToRulerAngle(quaterniond):
     q = quaterniond
@@ -49,21 +49,32 @@ def trans_landmarks(img, landmark_groups):
     return result
 
 def get_rotation_angle(img, landmarks, draw=False):
-    # get four stander point for pnp
-    landmarks = np.array([(landmarks[x], landmarks[5 + x],) for x in range(5)], dtype="double") 
-    landmarks = landmarks.astype(np.float32)
-    landmarks[1] = (landmarks[0] + landmarks[1]) / 2.0
-    landmarks = landmarks[1:]
+
+    # you can read more about this method model on https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/
+
     size = img.shape
+    parts = landmarks.parts()
+
+    #making an array of points(nose,chin,left-eye etc) from lm, which will be used to determine face angle
+    image_points = np.array([
+                                (parts[30].x, parts[30].y),     # Nose tip : point 30 in landmarks list
+                                (parts[8].x, parts[8].y),     # Chin : same
+                                (parts[36].x, parts[36].y),     # Left eye left corner
+                                (parts[45].x, parts[45].y),     # Right eye right corne
+                                (parts[48].x, parts[48].y),     # Left Mouth corner
+                                (parts[54].x, parts[54].y)      # Right mouth corner
+                            ], dtype="double")
+
+    #3D locations of the same points : You also need the 3D location of the 2D feature points. You might be thinking that you need a 3D model of the person in the photo to get the 3D locations. Ideally yes, but in practice, you don’t. A generic 3D model will suffice. Where do you get a 3D model of a head from ? Well, you really don’t need a full 3D model. You just need the 3D locations of a few points in some arbitrary reference frame. In this tutorial, we are going to use the following 3D points.
     model_points = np.array([
-        #(-225.0, 170, -135),  #left eye
-        #(225.0, 170, -135.0),
-        (0.0, 170, -135.0),
-        (0.0, -0.0, 0.0),   # nose
-        #(0, -150, -125),
-        (-150.0, -150, -125), #left mouth corner
-        (150.0, -150, -125),
-    ], dtype=np.float32)
+              (0.0, 0.0, 0.0),             # Nose tip
+              (0.0, -330.0, -65.0),        # Chin
+              (-225.0, 170.0, -135.0),     # Left eye left corner
+              (225.0, 170.0, -135.0),      # Right eye right corne
+              (-150.0, -150.0, -125.0),    # Left Mouth corner
+              (150.0, -150.0, -125.0)      # Right mouth corner
+          ])
+
     focal_length = size[1]
     center = (size[1] / 2, size[0] / 2,)
     camera_matrix = np.array([
@@ -72,7 +83,7 @@ def get_rotation_angle(img, landmarks, draw=False):
              [0, 0, 1]
          ], dtype=np.float32)
     dist_coeffs = np.zeros((4, 1))
-    (success, rotation_vector, trans_vector) = cv2.solvePnP(model_points, landmarks, camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_EPNP)
+    (success, rotation_vector, trans_vector) = cv2.solvePnP(model_points, image_points, camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_EPNP)
     f_pitch, f_yaw, f_roll = tran_euler(rotation_vector)
 
     n_pitch = prod_trans_point((0, 0, 500.0), rotation_vector, trans_vector, camera_matrix, dist_coeffs)
@@ -80,7 +91,7 @@ def get_rotation_angle(img, landmarks, draw=False):
     n_roll = prod_trans_point((0, 500.0, 0), rotation_vector, trans_vector, camera_matrix, dist_coeffs)
 
     if draw:
-        p1 = (int(landmarks[1][0]), int(landmarks[1][1]))
+        p1 = (int(image_points[0][0]), int(image_points[0][1]))
         cv2.line(img, p1, n_roll, (255, 0, 0), 2)
         cv2.line(img, p1, n_yaw, (0, 255, 0), 2)
         cv2.line(img, p1, n_pitch, (0, 0, 255), 2)
