@@ -1,4 +1,3 @@
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -87,12 +86,16 @@ class Process_WIKI_IMDB():
           gender = np.nan
       status, buf = cv2.imencode(".jpg", image)
       series["image"] = buf.tostring() 
-      series["face_rect"] = face_rect.dumps()  # xmin, ymin, xmax, ymax
-      series["landmarks"] = first_lmarks.dumps()  # y1..y5, x1..x5
-      series["trible_box"] = trible_box.dumps() 
+      series["face_rect"] = json.dumps(face_rect)  # xmin, ymin, xmax, ymax
+      series["trible_box"] =json.dumps(x,indent = 2)
       series["yaw"] = yaw
       series["pitch"] = pitch
       series["roll"] = roll
+      # converting landmarks (face_detection_object) to array so can be converted to json
+      landmarks_array = []
+      for point in lm.parts():
+        landmarks_array.append([point.x,point.y])
+      series["landmarks"] = json.dumps(landmarks_array,indent = 2)  # y1..y5, x1..x5
 
       return series
 
