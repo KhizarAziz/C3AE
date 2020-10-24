@@ -15,11 +15,11 @@ from pose import get_rotation_angle
 Dataset_DF = pd.DataFrame(columns=["age", "gender", "image", "org_box", "trible_box", "landmarks", "roll", "yaw", "pitch"])
 #initiate face detector and predictor
 detector = dlib.get_frontal_face_detector()
-predictor = dlib.shape_predictor("/content/shape_predictor_68_face_landmarks.dat")
+predictor = dlib.shape_predictor("/content/C3AE/detect/shape_predictor_68_face_landmarks.dat")
 
 def gen_boundbox(box, landmark):
     # getting 3 boxes for face, as required in paper... i.e feed 3 different sized images to network (R,G,B) 
-    ymin, xmin, ymax, xmax = box.bottom(), box.left(), box.top(), box.right()
+    ymin, xmin, ymax, xmax = box # box is [ymin, xmin, ymax, xmax]
     w, h = xmax - xmin, ymax - ymin
     nose_x, nose_y = (landmark.parts()[30].x, landmark.parts()[30].y) # calculating nose center point, so the triple boxes will be cropped according to nose point
     w_h_margin = abs(w - h)
@@ -73,70 +73,72 @@ class Process_WIKI_IMDB():
 
   def detect_faces_and_landmarks(self,image):
     face_rect_list = detector(image,1)
+    img_face_count = len(face_rect_list) # number of faces found in image
+    if img_face_count < 1:
+      return 0,[],[] # no face found, so return 
+
+    ymin, xmin, ymax, xmax = face_rect_list[0].bottom(), face_rect_list[0].left(), face_rect_list[0].top(), face_rect_list[0].right() # face_rect is dlib.rectangle object, so extracting values from it
     # make a landmarks_list of all faces detected in image
     lmarks_list = dlib.full_object_detections()
     for face_rect in face_rect_list:
       lmarks_list.append(predictor(image, face_rect)) # getting landmarks as a list of objects
-    return face_rect_list, lmarks_list
+    
+    return img_face_count,[ymin, xmin, ymax, xmax], lmarks_list
 
   def crop_and_transform_images(self):
     meta_dataframe = pd.read_csv(self.base_path.joinpath(self.dataset_name+'.csv'))
-    #filter out where second face != null (image have 2 faces)
-    meta_dataframe = meta_dataframe[meta_dataframe.second_face_score.isna()]
-  
     # init lists of all properties gonna be saved
     properties_list = []
     # loop through meta.csv for all images
     for index,series in meta_dataframe.iterrows():
+
       # clear multiple faces
       image_path = series.full_path
-      # try:
-      image = cv2.imread(image_path, cv2.IMREAD_COLOR)
-      image = cv2.copyMakeBorder(image, self.extra_padding, self.extra_padding, self.extra_padding, self.extra_padding, cv2.BORDER_CONSTANT)
-      face_rect_list, lmarks_list = self.detect_faces_and_landmarks(image) # Detect face & landmarks
-      if len(face_rect_list) > 1:
-        raise Exception("more than 1 faces in image",image_path )
+      try:
+        #filter out where second face != null (image have 2 faces)
+        if not pd.isnull(series.second_face_score):
+          raise Exception("has second face -> image has 2 face ",image_path )
+        image = cv2.imread(image_path, cv2.IMREAD_COLOR)
+        image = cv2.copyMakeBorder(image, self.extra_padding, self.extra_padding, self.extra_padding, self.extra_padding, cv2.BORDER_CONSTANT)
+        face_count,_,lmarks_list = self.detect_faces_and_landmarks(image) # Detect face & landmarks
+        if face_count != 1:
+          raise Exception("more than 1 or no face found in image ",image_path )
+        # found exactly 1 face, so now process it
+        #extract_image_chips will crop faces from image according to size & padding and align them in upright position and return list of them
+        cropped_faces = dlib.get_face_chips(image, lmarks_list,size=64, padding=0.4)  # aligned face with padding 0.4 in papper
+        image = cropped_faces[0] # must be only 1 face, so getting it.
+        # detect face landmarks again from cropped & align face.  (as positions of lmarks are changed in cropped image)
+        _,face_rect_box, lmarks_list = self.detect_faces_and_landmarks(image) # Detect face from cropped image
+        first_lmarks =lmarks_list[0] # getting first face's rectangle box and landmarks 
+        trible_box = gen_boundbox(face_rect_box, first_lmarks) # get 3 face boxes for nput into network, as reauired in paper
+        pitch, yaw, roll = get_rotation_angle(image, first_lmarks) # gen face rotation for filtering
+
+      except Exception as ee:        
+        print('index ',index,': exption ',ee)
+        # add null dummy values to current row & skill this iteration
+        properties_list.append(['nan','nan','nan','nan','nan','nan','nan','nan'])
         continue
-      elif len(face_rect_list) < 1:
-        raise Exception("No Face found in image ",image_path)
-        continue
-      #extract_image_chips will crop faces from image according to size & padding and align them in upright position and return list of them
-      cropped_faces = dlib.get_face_chips(image, lmarks_list,size=64, padding=0.4)  # aligned face with padding 0.4 in papper
-      # detect face landmarks again from cropped & align face.  (as positions of lmarks are changed in cropped image)
-      face_rect_list, lmarks_list = self.detect_faces_and_landmarks(cropped_faces[0]) # Detect face from cropped image
-      face_rect, first_lmarks = face_rect_list[0], lmarks_list[0] # getting first face's rectangle box and landmarks 
-      trible_box = gen_boundbox(face_rect, first_lmarks) # get 3 face boxes for nput into network, as reauired in paper
-      pitch, yaw, roll = get_rotation_angle(face_rect_list[0], first_lmarks) # gen face rotation for filtering
-      image = face_rect_list[0] # select the first align face and replace
-      # except Exception as ee:
-      #     print('exption ',ee)
-      #     trible_box = np.array([])
-      #     face_rect, first_lmarks = np.array([]), np.array([])
-      #     pitch, yaw, roll = np.nan, np.nan, np.nan
-      #     age = np.nan
-      #     gender = np.nan
-      
+        
+      # everything processed succefuly, now serialize values and save them
       status, buf = cv2.imencode(".jpg", image)
       image_buffer = buf.tostring()
-    #   face_rect_serialized = json.dumps(face_rect,indent = 2)  # xmin, ymin, xmax, ymax
-    #   trible_boxes_serialized =json.dumps(trible_box,indent = 2) # 3 boxes of face as required in paper
-    #   face_yaw = yaw
-    #   face_pitch = pitch
-    #   face_roll = roll
-    #   # converting landmarks (face_detection_object) to array so can be converted to json
-    #   landmarks_array = []
-    #   for point in lm.parts():
-    #     landmarks_array.append([point.x,point.y])
-    #   face_landmarks_serialized = json.dumps(landmarks_array,indent = 2)  # y1..y5, x1..x5
-
-    #   # adding determined values to properties list so that can later be converted to DF -> CSV
-    #   properties_list.append([image_path,image_buffer,face_rect_serialized,trible_boxes_serialized,face_yaw,face_pitch,face_roll,face_landmarks_serialized])
+      face_rect_box_serialized = json.dumps(face_rect_box,indent = 2)  # [xmin, ymin, xmax, ymax] : list of coords for face in image
+      face_yaw = yaw
+      face_pitch = pitch
+      face_roll = roll
+      trible_box = trible_box.tolist() # converting ndarray to list cuz ndarray cannot be encoded/serialized
+      trible_boxes_serialized = json.dumps(trible_box,indent = 2) # 3 boxes of face as required in paper
+      landmarks_list = [[point.x,point.y] for point in first_lmarks.parts()] # Same converting landmarks (face_detection_object) to array so can be converted to json
+      face_landmarks_serialized = json.dumps(landmarks_list,indent = 2)  # y1..y5, x1..x5
       
-    # print(len(properties_list),len(meta_dataframe))
+      # adding determined values to properties list so that can later be converted to DF -> CSV
+      properties_list.append([image_path,image_buffer,face_rect_box_serialized,trible_boxes_serialized,face_yaw,face_pitch,face_roll,face_landmarks_serialized])
+      
+    print(len(properties_list),len(meta_dataframe))
 
-    # new_DataFrame = pd.DataFrame(properties_list,columns=['image_path','image','org_box','trible_box','yaw','pitch','roll','landmarks'])
-    # new_DataFrame.to_csv('/content/Dataset.csv')
-    # return new_DataFrame
+    new_DataFrame = pd.DataFrame(properties_list,columns=['image_path','image','org_box','trible_box','yaw','pitch','roll','landmarks'])
+    new_DataFrame.to_csv('/content/Dataset.csv')
+    return new_DataFrame
 
 
 if __name__ == "__main__":
