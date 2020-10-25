@@ -41,6 +41,7 @@ def calculate_age(dob, image_capture_date):
       return image_capture_date - birth.year - 1
 
 class Process_WIKI_IMDB():
+
   
   def __init__(self,base_path,dataset_name,extra_padding):
     #init meta.mat file
@@ -49,8 +50,10 @@ class Process_WIKI_IMDB():
     self.base_path = Path(base_path)
     self.meta_file_path = self.base_path.joinpath(meta_file_name)
     self.extra_padding = extra_padding
-    self.Dataset_Df = pd.DataFrame()
+    self.Dataset_Df = pd.DataFrame() # creating dummy DF, later will process all images to make it real df
 
+
+  
   def meta_to_csv(self,dataset_name):
     test_num = 10
     # make list of all columns in meta.mat file
@@ -69,6 +72,7 @@ class Process_WIKI_IMDB():
     # save dataframe as csv
     Dataset_DF.to_csv(self.base_path.joinpath(self.dataset_name+'.csv'),index=False)
 
+
   def detect_faces_and_landmarks(self,image):
     face_rect_list = detector(image,1)
     img_face_count = len(face_rect_list) # number of faces found in image
@@ -82,6 +86,8 @@ class Process_WIKI_IMDB():
       lmarks_list.append(predictor(image, face_rect)) # getting landmarks as a list of objects
     
     return img_face_count,np.array([ymin, xmin, ymax, xmax]), lmarks_list
+
+
 
   def loadData_preprocessData_and_makeDataFrame(self):
     meta_dataframe = pd.read_csv(self.base_path.joinpath(self.dataset_name+'.csv'))
@@ -126,10 +132,43 @@ class Process_WIKI_IMDB():
       
       # adding everything to list
       properties_list.append([image_path,series.age,series.gender,image_buffer,face_rect_box_serialized,trible_boxes_serialized,face_yaw,face_pitch,face_roll,face_landmarks_serialized])
+    processed_dataset_df = pd.DataFrame(properties_list,columns=['image_path','age','gender','image','org_box','trible_box','yaw','pitch','roll','landmarks'])
+    # some filtering on df
+    processed_dataset_df = processed_dataset_df.dropna()
+    processed_dataset_df = processed_dataset_df[(processed_dataset_df.age >= 0) & (processed_dataset_df.age <= 100)]
+    processed_dataset_df.to_csv('/content/Dataset.csv',index=False)
+    self.Dataset_Df = processed_dataset_df
+    return processed_dataset_df # returning now (just in case need to return), maybe later remove...
 
-    # making DF
-    new_DataFrame = pd.DataFrame(properties_list,columns=['image_path','age','gender','image','org_box','trible_box','yaw','pitch','roll','landmarks'])
-    return new_DataFrame
+
+
+  # save processed dataset_df to feather format
+  def save(self, chunkSize=5000):
+      dataframe = self.Dataset_Df.reset_index()[self.heads]
+      chunk_start = 0
+      while(chunk_start < len(self.Dataset_Df)):
+          dir_path = self.base_path.joinpath(self.dataset_name + "_" + str(int(chunk_start / chunkSize)) + ".feather")
+          tmp_pd = dataframe[chunk_start:chunk_start + chunkSize].copy().reset_index()
+          tmp_pd.to_feather(dir_path)
+          chunk_start += chunkSize
+      print('succesfully saved as feather to ',dir_path)
+
+
+
+  def rectify_data(self):
+      sample = []
+      max_nums = 500.0
+      for x in range(100):
+          age_set = self.Dataset_Df[self.Dataset_Df.age == x]
+          cur_age_num = len(age_set)
+          if cur_age_num > max_nums:
+              age_set = age_set.sample(frac=max_nums / cur_age_num, random_state=2007)
+          sample.append(age_set)
+      self.Dataset_Df = pd.concat(sample, ignore_index=True)
+      self.Dataset_Df.age = self.Dataset_Df.age 
+      print(self.Dataset_Df.groupby(["age", "gender"]).agg(["count"]))
+
+
 
 if __name__ == "__main__":
   # define all parameters here
@@ -142,12 +181,8 @@ if __name__ == "__main__":
   if dataset_name == 'wiki' or dataset_name == 'imdb': # because structure is same
     dataset_class_ref_object = Process_WIKI_IMDB(dataset_directory_path,dataset_name,extra_padding)
     dataset_class_ref_object.meta_to_csv(dataset_name) # convert meta.mat to meta.csv
-    Dataset_DataFrame = dataset_class_ref_object.loadData_preprocessData_and_makeDataFrame()
-    # some filtering on df
-    Dataset_DataFrame = Dataset_DataFrame.dropna()
-    Dataset_DataFrame = Dataset_DataFrame[(Dataset_DataFrame.age >= 0) & (Dataset_DataFrame.age <= 100)]
-    # Dataset_DataFrame = Dataset_DataFrame[Dataset_DataFrame.landmarks != np.array([]).dumps()]
-    Dataset_DataFrame.to_csv('/content/Dataset.csv',index=False)
+    dataset_class_ref_object.loadData_preprocessData_and_makeDataFrame()
+    dataset_class_ref_object.save() # save preprocessed dataset as .feather in  dataset_directory_path
 
     # print(len(Dataset_DataFrame),Dataset_DataFrame.columns)
     # load all images
