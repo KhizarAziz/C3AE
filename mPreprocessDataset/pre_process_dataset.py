@@ -40,8 +40,6 @@ def calculate_age(dob, image_capture_date):
   else:
       return image_capture_date - birth.year - 1
 
-
-
 class Process_WIKI_IMDB():
   
   def __init__(self,base_path,dataset_name,extra_padding):
@@ -50,8 +48,8 @@ class Process_WIKI_IMDB():
     meta_file_name = dataset_name+'.mat'
     self.base_path = Path(base_path)
     self.meta_file_path = self.base_path.joinpath(meta_file_name)
-
     self.extra_padding = extra_padding
+    self.Dataset_Df = pd.DataFrame()
 
   def meta_to_csv(self,dataset_name):
     test_num = 10
@@ -83,15 +81,14 @@ class Process_WIKI_IMDB():
     for face_rect in face_rect_list:
       lmarks_list.append(predictor(image, face_rect)) # getting landmarks as a list of objects
     
-    return img_face_count,[ymin, xmin, ymax, xmax], lmarks_list
+    return img_face_count,np.array([ymin, xmin, ymax, xmax]), lmarks_list
 
-  def crop_and_transform_images(self):
+  def loadData_preprocessData_and_makeDataFrame(self):
     meta_dataframe = pd.read_csv(self.base_path.joinpath(self.dataset_name+'.csv'))
     # init lists of all properties gonna be saved
     properties_list = []
     # loop through meta.csv for all images
     for index,series in meta_dataframe.iterrows():
-
       # clear multiple faces
       image_path = series.full_path
       try:
@@ -111,35 +108,28 @@ class Process_WIKI_IMDB():
         _,face_rect_box, lmarks_list = self.detect_faces_and_landmarks(image) # Detect face from cropped image
         first_lmarks =lmarks_list[0] # getting first face's rectangle box and landmarks 
         trible_box = gen_boundbox(face_rect_box, first_lmarks) # get 3 face boxes for nput into network, as reauired in paper
-        pitch, yaw, roll = get_rotation_angle(image, first_lmarks) # gen face rotation for filtering
+        face_pitch, face_yaw, face_roll = get_rotation_angle(image, first_lmarks) # gen face rotation for filtering
 
       except Exception as ee:        
         print('index ',index,': exption ',ee)
-        # add null dummy values to current row & skill this iteration
-        properties_list.append(['nan','nan','nan','nan','nan','nan','nan','nan'])
+        properties_list.append([np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan]) # add null dummy values to current row & skill this iteration
         continue
         
       # everything processed succefuly, now serialize values and save them
       status, buf = cv2.imencode(".jpg", image)
       image_buffer = buf.tostring()
-      face_rect_box_serialized = json.dumps(face_rect_box,indent = 2)  # [xmin, ymin, xmax, ymax] : list of coords for face in image
-      face_yaw = yaw
-      face_pitch = pitch
-      face_roll = roll
-      trible_box = trible_box.tolist() # converting ndarray to list cuz ndarray cannot be encoded/serialized
-      trible_boxes_serialized = json.dumps(trible_box,indent = 2) # 3 boxes of face as required in paper
-      landmarks_list = [[point.x,point.y] for point in first_lmarks.parts()] # Same converting landmarks (face_detection_object) to array so can be converted to json
-      face_landmarks_serialized = json.dumps(landmarks_list,indent = 2)  # y1..y5, x1..x5
+      #dumping with `pickle` much faster than `json` (np.dumps is pickling)
+      face_rect_box_serialized = face_rect_box.dumps()  # [xmin, ymin, xmax, ymax] : Returns the pickle(encoding to binary format (better than json)) of the array as a string. pickle.loads or numpy.loads will convert the string back to an array
+      trible_boxes_serialized = trible_box.dumps() # 3 boxes of face as required in paper
+      landmarks_list = np.array([[point.x,point.y] for point in first_lmarks.parts()]) # Same converting landmarks (face_detection_object) to array so can be converted to json
+      face_landmarks_serialized = landmarks_list.dumps()#json.dumps(landmarks_list,indent = 2)  # y1..y5, x1..x5
       
-      # adding determined values to properties list so that can later be converted to DF -> CSV
-      properties_list.append([image_path,image_buffer,face_rect_box_serialized,trible_boxes_serialized,face_yaw,face_pitch,face_roll,face_landmarks_serialized])
-      
-    print(len(properties_list),len(meta_dataframe))
+      # adding everything to list
+      properties_list.append([image_path,series.age,series.gender,image_buffer,face_rect_box_serialized,trible_boxes_serialized,face_yaw,face_pitch,face_roll,face_landmarks_serialized])
 
-    new_DataFrame = pd.DataFrame(properties_list,columns=['image_path','image','org_box','trible_box','yaw','pitch','roll','landmarks'])
-    new_DataFrame.to_csv('/content/Dataset.csv')
+    # making DF
+    new_DataFrame = pd.DataFrame(properties_list,columns=['image_path','age','gender','image','org_box','trible_box','yaw','pitch','roll','landmarks'])
     return new_DataFrame
-
 
 if __name__ == "__main__":
   # define all parameters here
@@ -152,8 +142,14 @@ if __name__ == "__main__":
   if dataset_name == 'wiki' or dataset_name == 'imdb': # because structure is same
     dataset_class_ref_object = Process_WIKI_IMDB(dataset_directory_path,dataset_name,extra_padding)
     dataset_class_ref_object.meta_to_csv(dataset_name) # convert meta.mat to meta.csv
-    dataset_class_ref_object.crop_and_transform_images()
-    # call wiki convert meta.mat to df.csv
+    Dataset_DataFrame = dataset_class_ref_object.loadData_preprocessData_and_makeDataFrame()
+    # some filtering on df
+    Dataset_DataFrame = Dataset_DataFrame.dropna()
+    Dataset_DataFrame = Dataset_DataFrame[(Dataset_DataFrame.age >= 0) & (Dataset_DataFrame.age <= 100)]
+    # Dataset_DataFrame = Dataset_DataFrame[Dataset_DataFrame.landmarks != np.array([]).dumps()]
+    Dataset_DataFrame.to_csv('/content/Dataset.csv',index=False)
+
+    # print(len(Dataset_DataFrame),Dataset_DataFrame.columns)
     # load all images
     # call process all images
   elif dataset_name == 'imdb':
