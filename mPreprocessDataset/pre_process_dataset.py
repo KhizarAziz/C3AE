@@ -19,7 +19,7 @@ predictor = dlib.shape_predictor("/content/C3AE/detect/shape_predictor_68_face_l
 
 def gen_boundbox(box, landmark):
     # getting 3 boxes for face, as required in paper... i.e feed 3 different sized images to network (R,G,B) 
-    ymin, xmin, ymax, xmax = box # box is [ymin, xmin, ymax, xmax]
+    xmin, ymin, xmax, ymax = box # box is [ymin, xmin, ymax, xmax]
     w, h = xmax - xmin, ymax - ymin
     nose_x, nose_y = (landmark.parts()[30].x, landmark.parts()[30].y) # calculating nose center point, so the triple boxes will be cropped according to nose point
     w_h_margin = abs(w - h)
@@ -54,8 +54,7 @@ class Process_WIKI_IMDB():
 
 
   
-  def meta_to_csv(self,dataset_name):
-    test_num = 10
+  def meta_to_csv(self,dataset_name,test_num=-1):
     # make list of all columns in meta.mat file
     meta = loadmat(self.meta_file_path)
     full_path = [p[0] for p in meta[dataset_name][0, 0]["full_path"][0][:test_num]]
@@ -74,19 +73,19 @@ class Process_WIKI_IMDB():
 
 
   def detect_faces_and_landmarks(self,image):
-    face_rect_list = detector(image,1)
+    face_rect_list = detector(image)
     img_face_count = len(face_rect_list) # number of faces found in image
     if img_face_count < 1:
       return 0,[],[] # no face found, so return 
 
-    ymin, xmin, ymax, xmax = face_rect_list[0].bottom(), face_rect_list[0].left(), face_rect_list[0].top(), face_rect_list[0].right() # face_rect is dlib.rectangle object, so extracting values from it
+    xmin, ymin, xmax, ymax = face_rect_list[0].left() , face_rect_list[0].top(), face_rect_list[0].right(), face_rect_list[0].bottom() # face_rect is dlib.rectangle object, so extracting values from it
+    
     # make a landmarks_list of all faces detected in image
     lmarks_list = dlib.full_object_detections()
     for face_rect in face_rect_list:
       lmarks_list.append(predictor(image, face_rect)) # getting landmarks as a list of objects
     
-    return img_face_count,np.array([ymin, xmin, ymax, xmax]), lmarks_list
-
+    return img_face_count,np.array([xmin, ymin, xmax, ymax]), lmarks_list
 
 
   def loadData_preprocessData_and_makeDataFrame(self):
@@ -102,23 +101,26 @@ class Process_WIKI_IMDB():
         if not pd.isnull(series.second_face_score):
           raise Exception("has second face -> image has 2 face ",image_path )
         image = cv2.imread(image_path, cv2.IMREAD_COLOR)
-        image = cv2.copyMakeBorder(image, self.extra_padding, self.extra_padding, self.extra_padding, self.extra_padding, cv2.BORDER_CONSTANT)
+        # image = cv2.copyMakeBorder(image, self.extra_padding, self.extra_padding, self.extra_padding, self.extra_padding, cv2.BORDER_CONSTANT)
         face_count,_,lmarks_list = self.detect_faces_and_landmarks(image) # Detect face & landmarks
         if face_count != 1:
           raise Exception("more than 1 or no face found in image ",image_path )
         # found exactly 1 face, so now process it
         #extract_image_chips will crop faces from image according to size & padding and align them in upright position and return list of them
-        cropped_faces = dlib.get_face_chips(image, lmarks_list,size=64, padding=0.4)  # aligned face with padding 0.4 in papper
+        cropped_faces = dlib.get_face_chips(image, lmarks_list, padding=self.extra_padding)  # aligned face with padding 0.4 in papper
         image = cropped_faces[0] # must be only 1 face, so getting it.
         # detect face landmarks again from cropped & align face.  (as positions of lmarks are changed in cropped image)
         _,face_rect_box, lmarks_list = self.detect_faces_and_landmarks(image) # Detect face from cropped image
-        first_lmarks =lmarks_list[0] # getting first face's rectangle box and landmarks 
+        first_lmarks = lmarks_list[0] # getting first face's rectangle box and landmarks 
         trible_box = gen_boundbox(face_rect_box, first_lmarks) # get 3 face boxes for nput into network, as reauired in paper
+        if (trible_box < 0).any():
+          print(index,'Some part of face is out of image ',series.full_path)
+          raise Exception("more than 1 or no face found in image ",image_path )
         face_pitch, face_yaw, face_roll = get_rotation_angle(image, first_lmarks) # gen face rotation for filtering
 
       except Exception as ee:        
-        print('index ',index,': exption ',ee)
-        properties_list.append([np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan]) # add null dummy values to current row & skill this iteration
+        # print('index ',index,': exption ',ee)
+        properties_list.append([np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan]) # add null dummy values to current row & skill this iteration
         continue
         
       # everything processed succefuly, now serialize values and save them
@@ -132,6 +134,8 @@ class Process_WIKI_IMDB():
       
       # adding everything to list
       properties_list.append([image_path,series.age,series.gender,image_buffer,face_rect_box_serialized,trible_boxes_serialized,face_yaw,face_pitch,face_roll,face_landmarks_serialized])
+      if index%200 == 0:
+        print(index,'image added')
     processed_dataset_df = pd.DataFrame(properties_list,columns=['image_path','age','gender','image','org_box','trible_box','yaw','pitch','roll','landmarks'])
     # some filtering on df
     processed_dataset_df = processed_dataset_df.dropna()
@@ -144,7 +148,7 @@ class Process_WIKI_IMDB():
 
   # save processed dataset_df to feather format
   def save(self, chunkSize=5000):
-      dataframe = self.Dataset_Df.reset_index()[self.heads]
+      dataframe = self.Dataset_Df.reset_index()
       chunk_start = 0
       while(chunk_start < len(self.Dataset_Df)):
           dir_path = self.base_path.joinpath(self.dataset_name + "_" + str(int(chunk_start / chunkSize)) + ".feather")
@@ -176,11 +180,11 @@ if __name__ == "__main__":
   dataset_name = 'wiki' # different dataset name means different sequence for loading etc
 
   # image transform params (if require)
-  extra_padding = 0
+  extra_padding = 0.55
 
   if dataset_name == 'wiki' or dataset_name == 'imdb': # because structure is same
     dataset_class_ref_object = Process_WIKI_IMDB(dataset_directory_path,dataset_name,extra_padding)
-    dataset_class_ref_object.meta_to_csv(dataset_name) # convert meta.mat to meta.csv
+    dataset_class_ref_object.meta_to_csv(dataset_name,5000) # convert meta.mat to meta.csv
     dataset_class_ref_object.loadData_preprocessData_and_makeDataFrame()
     dataset_class_ref_object.save() # save preprocessed dataset as .feather in  dataset_directory_path
 
