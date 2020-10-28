@@ -35,7 +35,7 @@ def two_point(age_label, category, interval=10, elips=0.000001):
 
 
 
-def image_transform(row,target_img_shape=(64,64),dropout=0.,require_augmentation):
+def image_transform(row,target_img_shape=(64,64),dropout=0.,require_augmentation=False):
   # read image from buffer then decode
   img = np.frombuffer(row["image"], np.uint8)
   img = cv2.imdecode(img, cv2.IMREAD_COLOR)
@@ -65,7 +65,7 @@ def image_transform(row,target_img_shape=(64,64),dropout=0.,require_augmentation
   return cascad_imgs    
 
 
-def img_and_age_data_generator(dataset_df, batch_size=32,augmentation):
+def img_and_age_data_generator(dataset_df, batch_size=32,augmentation=False):
   dataset_df = dataset_df.reset_index(drop=True)
   df_count = len(dataset_df)
   idx = np.random.permutation(df_count) # it will return a list of numbrs (0-df_count), in randomnly arranged
