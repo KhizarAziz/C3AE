@@ -65,7 +65,7 @@ def image_transform(row,target_img_shape=(64,64),dropout=0.,require_augmentation
   return cascad_imgs    
 
 
-def img_and_age_data_generator(dataset_df, batch_size=32,augmentation=False):
+def img_and_age_data_generator(dataset_df,category=12,interval=10, batch_size=32,augmentation=False,dropout=0.3):
   dataset_df = dataset_df.reset_index(drop=True)
   df_count = len(dataset_df)
   idx = np.random.permutation(df_count) # it will return a list of numbrs (0-df_count), in randomnly arranged
@@ -82,7 +82,7 @@ def img_and_age_data_generator(dataset_df, batch_size=32,augmentation=False):
       img = image_transform(row, is_training=is_training, dropout=dropout,require_augmentation=augmentation)
       img_List.append(img)
       # make 2_point_represenation(list) of age
-      two_point_rep = two_point(int(row.age), 12, 10)
+      two_point_rep = two_point(int(row.age), category, interval)
       two_point_ages.append(two_point_rep)    
 
     img_nparray = np.array(img_List) # converting image list to np
