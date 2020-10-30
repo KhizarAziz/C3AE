@@ -58,13 +58,13 @@ def image_transform(row,dropout,target_img_shape,require_augmentation):
     triple_box_cropped = cv2.resize(triple_box_cropped, (64,64)) # resize according to size we want
     tripple_cropped_imgs.append(triple_box_cropped)
     # image augmentaion (hue, contrast,rotation etc) if needed
-    cascad_imgs = []
+    cascad_imgs = tripple_cropped_imgs
     if require_augmentation:
        flag = random.randint(0, 3)
        contrast = random.uniform(0.5, 2.5)
        bright = random.uniform(-50, 50)
        rotation = random.randint(-15, 15)
-       cascad_imgs = [image_enforcing(x, flag, contrast, bright, rotation) for x in tripple_cropped_imgs]
+       cascad_imgs = [image_enforcing(x, flag, contrast, bright, rotation) for x in cascad_imgs]
        
   return cascad_imgs    
 
@@ -74,7 +74,6 @@ def img_and_age_data_generator(dataset_df,category,interval,imgs_shape, batch_si
   df_count = len(dataset_df)
   idx = np.random.permutation(df_count) # it will return a list of numbrs (0-df_count), in randomnly arranged
   start = 0
-  print()
   while start+batch_size < df_count:
     idx_to_get = idx[start:start+batch_size] # making a list of random indexes, to get them from dataset
     current_batch = dataset_df.iloc[idx_to_get] # fetching some list, which is our batch
@@ -92,7 +91,8 @@ def img_and_age_data_generator(dataset_df,category,interval,imgs_shape, batch_si
     img_nparray = np.array(img_List) # converting image list to np
     two_point_ages_nparray = np.array(two_point_ages) # converting to np
     out = [current_batch.age.to_numpy(),two_point_ages_nparray] # making list of age_array & 2point_reprseation_array
-
+    
+    print(img_nparray.shape)
     yield [img_nparray[:,0], img_nparray[:,1], img_nparray[:,2]], out # return batch
     start += batch_size # update start point, for next batch
 

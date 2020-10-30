@@ -7,7 +7,7 @@ from scipy.io import loadmat
 from pathlib import Path
 from datetime import datetime
 import dlib
-from pose import get_rotation_angle
+from m_preprocess_dataset.pose import get_rotation_angle
 
 # process it to detect faces, detect landmarks, align, & make 3 sub boxes which will be used in next step to feed into network
 # save dataset as pandas,feather & imencode for size efficiency
