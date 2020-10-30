@@ -4,9 +4,9 @@ import pickle
 
 
 # adding random box in image with random colored pixels, it makes model generic????
-def random_erasing(img, drop_out=0.3, aspect=(0.5, 2), area=(0.06, 0.10)):
+def random_erasing(img, dropout=0.3, aspect=(0.5, 2), area=(0.06, 0.10)):
     # https://arxiv.org/pdf/1708.04896.pdf
-    if 1 - random.random() > drop_out:
+    if 1 - random.random() > dropout:
         return img
     img = img.copy()
     height, width = img.shape[:-1]
@@ -91,8 +91,7 @@ def img_and_age_data_generator(dataset_df,category,interval,imgs_shape, batch_si
     img_nparray = np.array(img_List) # converting image list to np
     two_point_ages_nparray = np.array(two_point_ages) # converting to np
     out = [current_batch.age.to_numpy(),two_point_ages_nparray] # making list of age_array & 2point_reprseation_array
-    
-    print(img_nparray.shape)
+
     yield [img_nparray[:,0], img_nparray[:,1], img_nparray[:,2]], out # return batch
     start += batch_size # update start point, for next batch
 
