@@ -1,6 +1,8 @@
 import numpy as np
 import cv2
 import pickle
+import random
+import keras.backend as K
 
 
 # adding random box in image with random colored pixels, it makes model generic????
@@ -72,29 +74,44 @@ def image_transform(row,dropout,target_img_shape,require_augmentation):
 def img_and_age_data_generator(dataset_df,category,interval,imgs_shape, batch_size,augmentation,dropout):
   dataset_df = dataset_df.reset_index(drop=True)
   df_count = len(dataset_df)
-  idx = np.random.permutation(df_count) # it will return a list of numbrs (0-df_count), in randomnly arranged
-  start = 0
-  while start+batch_size < df_count:
-    idx_to_get = idx[start:start+batch_size] # making a list of random indexes, to get them from dataset
-    current_batch = dataset_df.iloc[idx_to_get] # fetching some list, which is our batch
-    #load imgs, transform& create a list
-    img_List = []
-    two_point_ages = [] # list for 2_point_rep of ages
-    for index,row in current_batch.iterrows(): #iterate over batch to load & transform each img
-      # load and transform image
-      img = image_transform(row, dropout=dropout,target_img_shape=imgs_shape,require_augmentation=augmentation)
-      img_List.append(img)
-      # make 2_point_represenation(list) of age
-      two_point_rep = two_point(int(row.age), category, interval)
-      two_point_ages.append(two_point_rep)    
+  while True:
+    idx = np.random.permutation(df_count) # it will return a list of numbrs (0-df_count), in randomnly arranged
+    start = 0
+    while start+batch_size < df_count:
+      idx_to_get = idx[start:start+batch_size] # making a list of random indexes, to get them from dataset
+      current_batch = dataset_df.iloc[idx_to_get] # fetching some list, which is our batch
+      #load imgs, transform& create a list
+      img_List = []
+      two_point_ages = [] # list for 2_point_rep of ages
+      for index,row in current_batch.iterrows(): #iterate over batch to load & transform each img
+        # load and transform image
+        img = image_transform(row, dropout=dropout,target_img_shape=imgs_shape,require_augmentation=augmentation)
+        img_List.append(img)
+        # make 2_point_represenation(list) of age
+        two_point_rep = two_point(int(row.age), category, interval)
+        two_point_ages.append(two_point_rep)    
 
-    img_nparray = np.array(img_List) # converting image list to np
-    two_point_ages_nparray = np.array(two_point_ages) # converting to np
-    out = [current_batch.age.to_numpy(),two_point_ages_nparray] # making list of age_array & 2point_reprseation_array
+      img_nparray = np.array(img_List) # converting image list to np
+      two_point_ages_nparray = np.array(two_point_ages) # converting to np
+      out = [current_batch.age.to_numpy(),two_point_ages_nparray] # making list of age_array & 2point_reprseation_array
 
-    yield [img_nparray[:,0], img_nparray[:,1], img_nparray[:,2]], out # return batch
-    start += batch_size # update start point, for next batch
+      # print(len(two_point_ages_nparray[0]))
 
+      yield [img_nparray[:,0], img_nparray[:,1], img_nparray[:,2]], two_point_ages_nparray # return batch
+      start += batch_size # update start point, for next batch
+
+
+
+def image_enforcing(img, flag, contrast, bright, rotation):
+    if flag & 1:  # trans hue
+        img = cv2.convertScaleAbs(img, alpha=contrast, beta=bright)
+    elif flag & 2:  # rotation
+        height, width = img.shape[:-1]
+        matRotate = cv2.getRotationMatrix2D((height // 2, width // 2), rotation, 1) # mat rotate 1 center 2 angle 3 缩放系数
+        img = cv2.warpAffine(img, matRotate, (height, width))
+    elif flag & 4:  # flp 翻转
+        img = cv2.flip(img, 1)
+    return img
 
 ############### Model Related things
 def focal_loss(classes_num, gamma=2., alpha=.25, e=0.1):
