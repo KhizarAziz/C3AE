@@ -176,8 +176,8 @@ class Process_WIKI_IMDB():
 
 if __name__ == "__main__":
   # define all parameters here
-  dataset_directory_path = '/content/C3AE/dataset/imdb_crop'
-  dataset_name = 'imdb' # different dataset name means different sequence for loading etc
+  dataset_directory_path = '/content/C3AE/dataset/wiki_crop'
+  dataset_name = 'wiki' # different dataset name means different sequence for loading etc
 
   # image transform params (if require)
   extra_padding = 0.55
