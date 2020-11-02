@@ -93,11 +93,11 @@ def img_and_age_data_generator(dataset_df,category,interval,imgs_shape, batch_si
 
       img_nparray = np.array(img_List) # converting image list to np
       two_point_ages_nparray = np.array(two_point_ages) # converting to np
-      # out = [current_batch.age.to_numpy(),two_point_ages_nparray] # making list of age_array & 2point_reprseation_array
+      out = [current_batch.age.to_numpy(),two_point_ages_nparray] # making list of age_array & 2point_reprseation_array
 
       # print(len(two_point_ages_nparray[0]))
 
-      yield [img_nparray[:,0], img_nparray[:,1], img_nparray[:,2]], two_point_ages_nparray # return batch
+      yield [img_nparray[:,0], img_nparray[:,1], img_nparray[:,2]], out # return batch
       start += batch_size # update start point, for next batch
 
 
