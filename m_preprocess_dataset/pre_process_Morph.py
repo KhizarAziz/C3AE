@@ -115,7 +115,6 @@ def loadData_preprocessData_and_makeDataFrame():
     properties_list.append([image_path,series.age,series.gender,image_buffer,face_rect_box_serialized,trible_boxes_serialized,face_yaw,face_pitch,face_roll,face_landmarks_serialized])
     if index%200 == 0:
       print(index,'image added')
-    break
   processed_dataset_df = pd.DataFrame(properties_list,columns=['image_path','age','gender','image','org_box','trible_box','yaw','pitch','roll','landmarks'])
   # some filtering on df
   processed_dataset_df = processed_dataset_df.dropna()
