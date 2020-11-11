@@ -114,8 +114,8 @@ class Process_WIKI_IMDB():
     # init lists of all properties gonna be saved
     properties_list = []
     # loop through meta.csv for all images
-    print(meta_dataframe.shape)
     for index,series in meta_dataframe.iterrows():
+        
       # clear multiple faces
       image_path = series.full_path
       try:
@@ -125,7 +125,7 @@ class Process_WIKI_IMDB():
 
         image = cv2.imread(image_path, cv2.IMREAD_COLOR)
         
-        face_count,face_rect_box,lmarks_list = self.detect_faces_and_landmarks(image)
+        face_count,_,_ = self.detect_faces_and_landmarks(image)
         
         if face_count != 1:
           raise Exception("more than 1 or no face found in image " )
@@ -141,39 +141,39 @@ class Process_WIKI_IMDB():
         # here M is a transformation matrix(kernel). we apply this on each image
         M = transformation_from_points(landmark_ref[ALIGN_POINTS], landmark[ALIGN_POINTS])
         image = warp_im(image, M, ref_shape)
-        #---------------------------------------------------------------------------------------------
-        
+        #---------------------------------------------------------------------------------------------      
         first_lmarks = lmarks_list[0] # getting first face's rectangle box and landmarks 
-        tri_box = gen_equal_boundbox(face_rect_box)
+        trible_box = gen_equal_boundbox(face_rect_box)
 
-        trible_box = gen_boundbox(face_rect_box, first_lmarks) # get 3 face boxes for nput into network, as reauired in paper
+        # trible_box = gen_boundbox(face_rect_box, first_lmarks) # get 3 face boxes for nput into network, as reauired in paper
         if (trible_box < 0).any():
-          raise Exception("more than 1 or no face found in image ",image_path )
-        face_pitch, face_yaw, face_roll = get_rotation_angle(image, first_lmarks) # gen face rotation for filtering
+          raise Exception("more than 1 or no face found in image ",image_path )       
+        # face_pitch, face_yaw, face_roll = get_rotation_angle(image, first_lmarks) # gen face rotation for filtering
 
       except Exception as ee:        
-        print(index,': exption ',ee)
-        properties_list.append([np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan]) # add null dummy values to current row & skill this iteration
+        # print(index,': exption ',ee)
+        properties_list.append([np.nan,np.nan,np.nan,np.nan,np.nan]) # add null dummy values to current row & skill this iteration
         continue
         
       # everything processed succefuly, now serialize values and save them
       status, buf = cv2.imencode(".jpg", image)
+      # print(image.shape)
       image_buffer = buf.tostring()
       #dumping with `pickle` much faster than `json` (np.dumps is pickling)
-      face_rect_box_serialized = face_rect_box.dumps()  # [xmin, ymin, xmax, ymax] : Returns the pickle(encoding to binary format (better than json)) of the array as a string. pickle.loads or numpy.loads will convert the string back to an array
+      # face_rect_box_serialized = face_rect_box.dumps()  # [xmin, ymin, xmax, ymax] : Returns the pickle(encoding to binary format (better than json)) of the array as a string. pickle.loads or numpy.loads will convert the string back to an array
       trible_boxes_serialized = trible_box.dumps() # 3 boxes of face as required in paper
-      landmarks_list = np.array([[point.x,point.y] for point in first_lmarks.parts()]) # Same converting landmarks (face_detection_object) to array so can be converted to json
-      face_landmarks_serialized = landmarks_list.dumps()#json.dumps(landmarks_list,indent = 2)  # y1..y5, x1..x5
+      # landmarks_list = np.array([[point.x,point.y] for point in first_lmarks.parts()]) # Same converting landmarks (face_detection_object) to array so can be converted to json
+      # face_landmarks_serialized = landmarks_list.dumps()#json.dumps(landmarks_list,indent = 2)  # y1..y5, x1..x5
       
       # adding everything to list
-      properties_list.append([image_path,series.age,series.gender,image_buffer,face_rect_box_serialized,trible_boxes_serialized,face_yaw,face_pitch,face_roll,face_landmarks_serialized])
+      properties_list.append([image_path,series.age,series.gender,image_buffer,trible_boxes_serialized])
       if index%200 == 0:
         print(index,'image added')
-    processed_dataset_df = pd.DataFrame(properties_list,columns=['image_path','age','gender','image','org_box','trible_box','yaw','pitch','roll','landmarks'])
+    processed_dataset_df = pd.DataFrame(properties_list,columns=['image_path','age','gender','image','trible_box'])
     # some filtering on df
     processed_dataset_df = processed_dataset_df.dropna()
     processed_dataset_df = processed_dataset_df[(processed_dataset_df.age >= 0) & (processed_dataset_df.age <= 100)]
-    processed_dataset_df.to_csv('/content/Dataset.csv',index=False)
+    # processed_dataset_df.to_csv('/content/Dataset.csv',index=False)
     self.Dataset_Df = processed_dataset_df
     return processed_dataset_df # returning now (just in case need to return), maybe later remove...
 
