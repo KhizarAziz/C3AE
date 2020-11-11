@@ -26,6 +26,27 @@ def gen_boundbox(box, landmark):
     ])
 
 
+def gen_equal_boundbox(box,gap_margin=30):
+    # getting 3 boxes for face, as required in paper... i.e feed 3 different sized images to network (R,G,B) 
+    xmin, ymin, xmax, ymax = box # box is [ymin, xmin, ymax, xmax]
+    w, h = xmax - xmin, ymax - ymin
+
+    percentMargin = gap_margin/100 # 30% margin
+    margin_y = int(h * percentMargin)
+    margin_x = int(h * percentMargin)
+
+    # calculating new coordinates
+    new_X =  xmin - margin_x 
+    new_Y = ymin - margin_y
+    new_X2 = xmax + int(margin_x) # mutliply by 2 because x is going backwards by same value, so adding 2 times margin
+    new_Y2 = ymax + int(margin_y) # mutliply by 2 because y is going Upwards by same value
+
+    return np.array([[(xmin,ymin),(xmax,ymax)], # original box
+                    [(new_X,new_Y),(new_X2,new_Y2)]]) #  outer box
+
+
+
+
 
 def init_dataset_meta_csv():
   image_dir = dataset_base_path.joinpath('morph')
@@ -76,9 +97,15 @@ def detect_faces_and_landmarks(image):
 def loadData_preprocessData_and_makeDataFrame():
   meta_dataframe = pd.read_csv(dataset_base_path.joinpath(dataset_name+'_meta.csv'))
   properties_list = [] # init lists of all properties gonna be saved
+  
   # loop through meta.csv for all images
   for index,series in meta_dataframe.iterrows():
     image_path = series.full_path # get image path
+    if index == 0:
+      image_path = '/content/side.jpg'
+    if index == 1:
+      image_path = '/content/Data Scientist.jpg'
+
     try:
       image = cv2.imread(image_path, cv2.IMREAD_COLOR)
       # image = cv2.copyMakeBorder(image, self.extra_padding, self.extra_padding, self.extra_padding, self.extra_padding, cv2.BORDER_CONSTANT)
@@ -86,19 +113,31 @@ def loadData_preprocessData_and_makeDataFrame():
       if face_count != 1:
         raise Exception("more than 1 or no face found in image ",image_path )
       # found exactly 1 face, so now process it
+      #########################CropFace + genBox###################################
       #extract_image_chips will crop faces from image according to size & padding and align them in upright position and return list of them
-      cropped_faces = dlib.get_face_chips(image, lmarks_list, padding=extra_padding)  # aligned face with padding 0.4 in papper
+      cropped_faces = dlib.get_face_chips(image, lmarks_list, padding=0.8)  # aligned face with padding 0.4 in papper
+      # crop2 = dlib.get_face_chips(image, lmarks_list, padding=0.8,size=(64,64))  # aligned face with padding 0.4 in papper
       image = cropped_faces[0] # must be only 1 face, so getting it.
-      # detect face landmarks again from cropped & align face.  (as positions of lmarks are changed in cropped image)
       _,face_rect_box, lmarks_list = detect_faces_and_landmarks(image) # Detect face from cropped image
       first_lmarks = lmarks_list[0] # getting first face's rectangle box and landmarks 
-      trible_box = gen_boundbox(face_rect_box, first_lmarks) # get 3 face boxes for nput into network, as reauired in paper
-      if (trible_box < 0).any():
-        print(index,'Some part of face is out of image ',series.full_path)
-        raise Exception("more than 1 or no face found in image ",image_path )
+      double_box = gen_equal_boundbox(face_rect_box,gap_margin = 30) # get 2 face boxes for nput into network, as reauired in paper
+      ####################################Save image to check #######################################
+      test_img = cropped_faces[0]
+      if index % 5000 == 0:
+        for bbox in double_box:
+          bbox = bbox
+          h_min, w_min = bbox[0]
+          h_max, w_max = bbox[1]
+          cv2.rectangle(test_img, (h_min,w_min), (h_max,w_max),(255,0,0),2)
+          cv2.imwrite('/content/saved{}_original.jpg'.format(index),image)
+          print('test image saved /content/saved{}_original.jpg'.format(index))
+      ###########################################################################
+      # detect face landmarks again from cropped & align face.  (as positions of lmarks are changed in cropped image)
+      if (double_box < 0).any():
+        raise Exception('Some part of face is out of image ')
       face_pitch, face_yaw, face_roll = get_rotation_angle(image, first_lmarks) # gen face rotation for filtering
     except Exception as ee:        
-      # print('index ',index,': exption ',ee)
+      print('index ',index,': exption ',ee,series.full_path)
       properties_list.append([np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan]) # add null dummy values to current row & skill this iteration
       continue
       
@@ -107,14 +146,14 @@ def loadData_preprocessData_and_makeDataFrame():
     image_buffer = buf.tostring()
     #dumping with `pickle` much faster than `json` (np.dumps is pickling)
     face_rect_box_serialized = face_rect_box.dumps()  # [xmin, ymin, xmax, ymax] : Returns the pickle(encoding to binary format (better than json)) of the array as a string. pickle.loads or numpy.loads will convert the string back to an array
-    trible_boxes_serialized = trible_box.dumps() # 3 boxes of face as required in paper
+    trible_boxes_serialized = double_box.dumps() # 2 boxes of face as required in paper
     landmarks_list = np.array([[point.x,point.y] for point in first_lmarks.parts()]) # Same converting landmarks (face_detection_object) to array so can be converted to json
     face_landmarks_serialized = landmarks_list.dumps()#json.dumps(landmarks_list,indent = 2)  # y1..y5, x1..x5
     
     # adding everything to list
     properties_list.append([image_path,series.age,series.gender,image_buffer,face_rect_box_serialized,trible_boxes_serialized,face_yaw,face_pitch,face_roll,face_landmarks_serialized])
-    if index%200 == 0:
-      print(index,'image added')
+    if index%400 == 0:
+      print(index,'images added processed')
   processed_dataset_df = pd.DataFrame(properties_list,columns=['image_path','age','gender','image','org_box','trible_box','yaw','pitch','roll','landmarks'])
   # some filtering on df
   processed_dataset_df = processed_dataset_df.dropna()
@@ -171,4 +210,4 @@ if __name__ == "__main__":
 
     init_dataset_meta_csv() # convert meta.mat to meta.csv
     Dataset_DF = loadData_preprocessData_and_makeDataFrame()
-    save() # save preprocessed dataset as .feather in  dataset_directory_path
+    # save() # save preprocessed dataset as .feather in  dataset_directory_path

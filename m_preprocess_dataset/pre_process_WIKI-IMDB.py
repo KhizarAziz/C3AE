@@ -12,11 +12,6 @@ from pose import get_rotation_angle,get_landmarks,warp_im,transformation_from_po
 # process it to detect faces, detect landmarks, align, & make 3 sub boxes which will be used in next step to feed into network
 # save dataset as pandas,feather & imencode for size efficiency
 
-Dataset_DF = pd.DataFrame(columns=["age", "gender", "image", "org_box", "trible_box", "landmarks", "roll", "yaw", "pitch"])
-#initiate face detector and predictor
-detector = dlib.get_frontal_face_detector()
-predictor = dlib.shape_predictor("/content/C3AE/detect/shape_predictor_68_face_landmarks.dat")
-
 def gen_boundbox(box, landmark):
     # getting 3 boxes for face, as required in paper... i.e feed 3 different sized images to network (R,G,B) 
     xmin, ymin, xmax, ymax = box # box is [ymin, xmin, ymax, xmax]
@@ -31,13 +26,12 @@ def gen_boundbox(box, landmark):
         [(nose_x - w//2, nose_y - w//2), (nose_x + w//2, nose_y + w//2)]  # inner box
     ])
 
-
-def gen_equal_boundbox(box):
+def gen_equal_boundbox(box,gap_margin=30):
     # getting 3 boxes for face, as required in paper... i.e feed 3 different sized images to network (R,G,B) 
     xmin, ymin, xmax, ymax = box # box is [ymin, xmin, ymax, xmax]
     w, h = xmax - xmin, ymax - ymin
 
-    percentMargin = 30/100 # 20% margin
+    percentMargin = gap_margin/100 # 30% margin
     margin_y = int(h * percentMargin)
     margin_x = int(h * percentMargin)
 
@@ -115,64 +109,60 @@ class Process_WIKI_IMDB():
     properties_list = []
     # loop through meta.csv for all images
     for index,series in meta_dataframe.iterrows():
-        
       # clear multiple faces
       image_path = series.full_path
       try:
         #filter out where second face != null (image have 2 faces)
         if not pd.isnull(series.second_face_score):
-          raise Exception("has second face -> image has 2 face " )
-
+          raise Exception("has second face -> image has 2 face ",image_path )
         image = cv2.imread(image_path, cv2.IMREAD_COLOR)
-        
-        face_count,_,_ = self.detect_faces_and_landmarks(image)
-        
+        # image = cv2.copyMakeBorder(image, self.extra_padding, self.extra_padding, self.extra_padding, self.extra_padding, cv2.BORDER_CONSTANT)
+        face_count,_,lmarks_list = self.detect_faces_and_landmarks(image) # Detect face & landmarks
         if face_count != 1:
-          raise Exception("more than 1 or no face found in image " )
+          raise Exception("more than 1 or no face found in image ",image_path )
         # found exactly 1 face, so now process it
-
-        padding = np.maximum(image.shape[0]//2,image.shape[1]//2) # including padding to image from larger resoltion, so later bounds cant go out of image
-        image = cv2.copyMakeBorder(image,padding,padding,padding,padding,cv2.BORDER_REPLICATE)
-        #---------------------------------------------------------------------------------------------
-        # Face align
-        landmark_ref, ALIGN_POINTS,ref_shape = get_dummy_refrence_face()
-        # print(image.shape,image_path)
-        landmark = get_landmarks(image,detector,predictor)
-        # here M is a transformation matrix(kernel). we apply this on each image
-        M = transformation_from_points(landmark_ref[ALIGN_POINTS], landmark[ALIGN_POINTS])
-        image = warp_im(image, M, ref_shape)
-        #---------------------------------------------------------------------------------------------      
-        
-        _,face_rect_box,lmarks_list = self.detect_faces_and_landmarks(image)
-
+        #########################CropFace + genBox###################################
+        #extract_image_chips will crop faces from image according to size & padding and align them in upright position and return list of them
+        cropped_faces = dlib.get_face_chips(image, lmarks_list, padding=0.8)  # aligned face with padding 0.4 in papper
+        # crop2 = dlib.get_face_chips(image, lmarks_list, padding=0.8,size=(64,64))  # aligned face with padding 0.4 in papper
+        image = cropped_faces[0] # must be only 1 face, so getting it.
+        _,face_rect_box, lmarks_list = detect_faces_and_landmarks(image) # Detect face from cropped image
         first_lmarks = lmarks_list[0] # getting first face's rectangle box and landmarks 
-        trible_box = gen_equal_boundbox(face_rect_box)
-
-        # trible_box = gen_boundbox(face_rect_box, first_lmarks) # get 3 face boxes for nput into network, as reauired in paper
-        if (trible_box < 0).any():
-          raise Exception("more than 1 or no face found in image ",image_path )       
-        # face_pitch, face_yaw, face_roll = get_rotation_angle(image, first_lmarks) # gen face rotation for filtering
-
+        double_box = gen_equal_boundbox(face_rect_box,gap_margin = 30) # get 2 face boxes for nput into network, as reauired in paper
+        ####################################Save image to check #######################################
+        test_img = cropped_faces[0]
+        if index % 1000 == 0:
+          for bbox in double_box:
+            bbox = bbox
+            h_min, w_min = bbox[0]
+            h_max, w_max = bbox[1]
+            cv2.rectangle(test_img, (h_min,w_min), (h_max,w_max),(255,0,0),2)
+            cv2.imwrite('/content/saved{}_original.jpg'.format(index),image)
+            print('test image saved /content/saved{}_original.jpg'.format(index))
+        ###########################################################################
+        # detect face landmarks again from cropped & align face.  (as positions of lmarks are changed in cropped image)
+        if (double_box < 0).any():
+          raise Exception('Some part of face is out of image ')
+        face_pitch, face_yaw, face_roll = get_rotation_angle(image, first_lmarks) # gen face rotation for filtering
       except Exception as ee:        
-        print(index,': exption ',ee)
-        properties_list.append([np.nan,np.nan,np.nan,np.nan,np.nan]) # add null dummy values to current row & skill this iteration
+        print('index ',index,': exption ',ee,series.full_path)
+        properties_list.append([np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan]) # add null dummy values to current row & skill this iteration
         continue
         
       # everything processed succefuly, now serialize values and save them
       status, buf = cv2.imencode(".jpg", image)
-      # print(image.shape)
       image_buffer = buf.tostring()
       #dumping with `pickle` much faster than `json` (np.dumps is pickling)
-      # face_rect_box_serialized = face_rect_box.dumps()  # [xmin, ymin, xmax, ymax] : Returns the pickle(encoding to binary format (better than json)) of the array as a string. pickle.loads or numpy.loads will convert the string back to an array
-      trible_boxes_serialized = trible_box.dumps() # 3 boxes of face as required in paper
-      # landmarks_list = np.array([[point.x,point.y] for point in first_lmarks.parts()]) # Same converting landmarks (face_detection_object) to array so can be converted to json
-      # face_landmarks_serialized = landmarks_list.dumps()#json.dumps(landmarks_list,indent = 2)  # y1..y5, x1..x5
+      face_rect_box_serialized = face_rect_box.dumps()  # [xmin, ymin, xmax, ymax] : Returns the pickle(encoding to binary format (better than json)) of the array as a string. pickle.loads or numpy.loads will convert the string back to an array
+      trible_boxes_serialized = double_box.dumps() # 3 boxes of face as required in paper
+      landmarks_list = np.array([[point.x,point.y] for point in first_lmarks.parts()]) # Same converting landmarks (face_detection_object) to array so can be converted to json
+      face_landmarks_serialized = landmarks_list.dumps()#json.dumps(landmarks_list,indent = 2)  # y1..y5, x1..x5
       
       # adding everything to list
-      properties_list.append([image_path,series.age,series.gender,image_buffer,trible_boxes_serialized])
-      if index%200 == 0:
-        print(index,'image added')
-    processed_dataset_df = pd.DataFrame(properties_list,columns=['image_path','age','gender','image','trible_box'])
+      properties_list.append([image_path,series.age,series.gender,image_buffer,face_rect_box_serialized,trible_boxes_serialized,face_yaw,face_pitch,face_roll,face_landmarks_serialized])
+      if index%500 == 0:
+        print(index,'images preprocessed')
+    processed_dataset_df = pd.DataFrame(properties_list,columns=['image_path','age','gender','image','org_box','trible_box','yaw','pitch','roll','landmarks'])
     # some filtering on df
     processed_dataset_df = processed_dataset_df.dropna()
     processed_dataset_df = processed_dataset_df[(processed_dataset_df.age >= 0) & (processed_dataset_df.age <= 100)]
@@ -191,7 +181,7 @@ class Process_WIKI_IMDB():
           tmp_pd = dataframe[chunk_start:chunk_start + chunkSize].copy().reset_index()
           tmp_pd.to_feather(dir_path)
           chunk_start += chunkSize
-          print('succesfully saved as feather to ',dir_path)
+      print('succesfully saved as feather to ',dir_path)
 
 
 
@@ -208,28 +198,22 @@ class Process_WIKI_IMDB():
       self.Dataset_Df.age = self.Dataset_Df.age 
       print(self.Dataset_Df.groupby(["age", "gender"]).agg(["count"]))
 
+Dataset_DF = pd.DataFrame(columns=["age", "gender", "image", "org_box", "trible_box", "landmarks", "roll", "yaw", "pitch"])
+#initiate face detector and predictor
+detector = dlib.get_frontal_face_detector()
+predictor = dlib.shape_predictor("/content/C3AE_keras/detector/shape_predictor_68_face_landmarks.dat")
+
+# define all parameters here
+dataset_directory_path = '/content/C3AE_keras/datasets/wiki_crop'
+dataset_name = 'wiki' # different dataset name means different sequence for loading etc
+# image transform params (if require)
+extra_padding = 0.55
 
 
 if __name__ == "__main__":
-  # define all parameters here
-  dataset_directory_path = '/content/C3AE/dataset/wiki_crop'
-  dataset_name = 'wiki' # different dataset name means different sequence for loading etc
-
-  # image transform params (if require)
-  extra_padding = 0.55
 
   if dataset_name == 'wiki' or dataset_name == 'imdb': # because structure is same
     dataset_class_ref_object = Process_WIKI_IMDB(dataset_directory_path,dataset_name,extra_padding)
     dataset_class_ref_object.meta_to_csv(dataset_name) # convert meta.mat to meta.csv
     dataset_class_ref_object.loadData_preprocessData_and_makeDataFrame()
     dataset_class_ref_object.save() # save preprocessed dataset as .feather in  dataset_directory_path
-
-    # print(len(Dataset_DataFrame),Dataset_DataFrame.columns)
-    # load all images
-    # call process all images
-  elif dataset_name == 'imdb':
-    print('imdb')
-    #init imdb object with initial parameters
-    # call imdb convert meta.mat to df.csv
-    # load all images
-    # call process all images
