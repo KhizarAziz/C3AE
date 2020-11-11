@@ -104,3 +104,91 @@ def prod_trans_point(p3d, rotation_vector, trans_vector, camera_matrix, dist_coe
     plane_point, _ = cv2.projectPoints(np.array([p3d]), rotation_vector, trans_vector, camera_matrix, dist_coeffs)
     return (int(plane_point[0][0][0]), int(plane_point[0][0][1]))
 
+################ face alignment #############
+
+# we have already processed an image and got it's landmarks, so we dont need to download ref_image each time.
+def get_dummy_refrence_face():
+  ref_face_landmarks = np.matrix([[227, 402],[229, 443],[234, 484],[241, 523],[251, 560],[272, 590],[305, 611],[342, 624],[382, 627],[423, 624],[460, 610],[488, 586],[507, 554],[516, 515],
+                                  [521, 474],[525, 432],[525, 390],[243, 383],[261, 362],[290, 357],[319, 361],[349, 370],[389, 370],[418, 359],[449, 353],[480, 355],[501, 374],[369, 391],[369, 413],[370, 436],
+                                  [371, 460],[342, 480],[357, 484],[373, 487],[389, 483],[404, 478],[278, 400],[293, 387],[314, 387],[335, 400],[314, 403],[293, 404],[410, 398],[429, 384],
+                                  [450, 383],[467, 394],[451, 400],[431, 400],[319, 531],[339, 522],[360, 516],[376, 520],[391, 516],[413, 520],[437, 529],[415, 544],[394, 547],[377, 549],[360, 548],
+                                  [340, 545],[328, 531],[359, 529],[376, 530],[392, 528],[427, 529],[393, 526],[377, 528],
+                                  [360, 527]])
+  # landmarks of face are normally distributed like this.. i.e NOSE landmark points are from 27 to 35
+  JAW_POINTS = list(range(0, 17))
+  RIGHT_BROW_POINTS = list(range(17, 22))
+  LEFT_BROW_POINTS = list(range(22, 27))
+  NOSE_POINTS = list(range(27, 35))
+  RIGHT_EYE_POINTS = list(range(36, 42))
+  LEFT_EYE_POINTS = list(range(42, 48))
+  MOUTH_POINTS = list(range(48, 61))
+  FACE_POINTS = list(range(17, 68))
+
+  # Points used to line up the images.
+  ALIGN_POINTS = (LEFT_BROW_POINTS + RIGHT_EYE_POINTS + LEFT_EYE_POINTS +
+                                  RIGHT_BROW_POINTS + NOSE_POINTS + MOUTH_POINTS)
+
+  return ref_face_landmarks,ALIGN_POINTS, (750, 750, 3) # this was shape of our image from which we got landmarks
+
+def warp_im(im, M, dshape):
+    output_im = np.zeros(dshape, dtype=im.dtype)
+    cv2.warpAffine(im,
+                   M[:2],
+                   (dshape[1], dshape[0]),
+                   dst=output_im,
+                   borderMode=cv2.BORDER_TRANSPARENT,
+                   flags=cv2.WARP_INVERSE_MAP)
+    return output_im
+
+def transformation_from_points(points1, points2):
+    """
+    Return an affine transformation [s * R | T] such that:
+        sum ||s*R*p1,i + T - p2,i||^2
+    is minimized.
+    """
+    # Solve the procrustes problem by subtracting centroids, scaling by the
+    # standard deviation, and then using the SVD to calculate the rotation. See
+    # the following for more details:
+    # https://en.wikipedia.org/wiki/Orthogonal_Procrustes_problem
+
+    # converting points array to np.float64 to subtract (we cannot subtract normal int/float from an array... so convert to numpy float64 )
+    points1 = points1.astype(np.float64)
+    points2 = points2.astype(np.float64)
+
+    # calcuating means i.e c1 & c2 are numpy float64 type of values
+    c1 = np.mean(points1, axis=0)
+    c2 = np.mean(points2, axis=0)
+    points1 -= c1 # now can subtract
+    points2 -= c2
+
+    # taking standard deviation
+    s1 = np.std(points1)
+    s2 = np.std(points2)
+    points1 /= s1
+    points2 /= s2
+
+
+    U, S, Vt = np.linalg.svd(points1.T * points2)
+
+    # The R we seek is in fact the transpose of the one given by U * Vt. This
+    # is because the above formulation assumes the matrix goes on the right
+    # (with row vectors) where as our solution requires the matrix to be on the
+    # left (with column vectors).
+    R = (U * Vt).T
+
+    return np.vstack([np.hstack(((s2 / s1) * R,
+                                       c2.T - (s2 / s1) * R * c1.T)),
+                         np.matrix([0., 0., 1.])])
+
+def get_landmarks(im,detector,predictor):
+    rects = detector(im, 1)
+
+    return np.matrix([[p.x, p.y] for p in predictor(im, rects[0]).parts()])
+
+
+
+
+
+
+
+

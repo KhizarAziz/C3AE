@@ -7,7 +7,7 @@ from scipy.io import loadmat
 from pathlib import Path
 from datetime import datetime
 import dlib
-from pose import get_rotation_angle
+from pose import get_rotation_angle,get_landmarks,warp_im,transformation_from_points,get_dummy_refrence_face
 
 # process it to detect faces, detect landmarks, align, & make 3 sub boxes which will be used in next step to feed into network
 # save dataset as pandas,feather & imencode for size efficiency
@@ -30,6 +30,27 @@ def gen_boundbox(box, landmark):
         [(nose_x - top2nose, nose_y - top2nose), (nose_x + top2nose, nose_y + top2nose)],  # middle
         [(nose_x - w//2, nose_y - w//2), (nose_x + w//2, nose_y + w//2)]  # inner box
     ])
+
+
+def gen_equal_boundbox(box):
+    # getting 3 boxes for face, as required in paper... i.e feed 3 different sized images to network (R,G,B) 
+    xmin, ymin, xmax, ymax = box # box is [ymin, xmin, ymax, xmax]
+    w, h = xmax - xmin, ymax - ymin
+
+    percentMargin = 30/100 # 20% margin
+    margin_y = int(h * percentMargin)
+    margin_x = int(h * percentMargin)
+
+    # calculating new coordinates
+    new_X =  xmin - margin_x 
+    new_Y = ymin - margin_y
+    new_X2 = xmax + int(margin_x) # mutliply by 2 because x is going backwards by same value, so adding 2 times margin
+    new_Y2 = ymax + int(margin_y) # mutliply by 2 because y is going Upwards by same value
+
+    return np.array([[(xmin,ymin),(xmax,ymax)], # original box
+                    [(new_X,new_Y),(new_X2,new_Y2)]]) #  outer box
+
+
 
 
 def calculate_age(dob, image_capture_date):
@@ -93,33 +114,45 @@ class Process_WIKI_IMDB():
     # init lists of all properties gonna be saved
     properties_list = []
     # loop through meta.csv for all images
+    print(meta_dataframe.shape)
     for index,series in meta_dataframe.iterrows():
       # clear multiple faces
       image_path = series.full_path
       try:
         #filter out where second face != null (image have 2 faces)
         if not pd.isnull(series.second_face_score):
-          raise Exception("has second face -> image has 2 face ",image_path )
+          raise Exception("has second face -> image has 2 face " )
+
         image = cv2.imread(image_path, cv2.IMREAD_COLOR)
-        # image = cv2.copyMakeBorder(image, self.extra_padding, self.extra_padding, self.extra_padding, self.extra_padding, cv2.BORDER_CONSTANT)
-        face_count,_,lmarks_list = self.detect_faces_and_landmarks(image) # Detect face & landmarks
+        
+        face_count,face_rect_box,lmarks_list = self.detect_faces_and_landmarks(image)
+        
         if face_count != 1:
-          raise Exception("more than 1 or no face found in image ",image_path )
+          raise Exception("more than 1 or no face found in image " )
         # found exactly 1 face, so now process it
-        #extract_image_chips will crop faces from image according to size & padding and align them in upright position and return list of them
-        cropped_faces = dlib.get_face_chips(image, lmarks_list, padding=self.extra_padding)  # aligned face with padding 0.4 in papper
-        image = cropped_faces[0] # must be only 1 face, so getting it.
-        # detect face landmarks again from cropped & align face.  (as positions of lmarks are changed in cropped image)
-        _,face_rect_box, lmarks_list = self.detect_faces_and_landmarks(image) # Detect face from cropped image
+
+        padding = np.maximum(image.shape[0]//2,image.shape[1]//2) # including padding to image from larger resoltion, so later bounds cant go out of image
+        image = cv2.copyMakeBorder(image,padding,padding,padding,padding,cv2.BORDER_REPLICATE)
+        #---------------------------------------------------------------------------------------------
+        # Face align
+        landmark_ref, ALIGN_POINTS,ref_shape = get_dummy_refrence_face()
+        # print(image.shape,image_path)
+        landmark = get_landmarks(image,detector,predictor)
+        # here M is a transformation matrix(kernel). we apply this on each image
+        M = transformation_from_points(landmark_ref[ALIGN_POINTS], landmark[ALIGN_POINTS])
+        image = warp_im(image, M, ref_shape)
+        #---------------------------------------------------------------------------------------------
+        
         first_lmarks = lmarks_list[0] # getting first face's rectangle box and landmarks 
+        tri_box = gen_equal_boundbox(face_rect_box)
+
         trible_box = gen_boundbox(face_rect_box, first_lmarks) # get 3 face boxes for nput into network, as reauired in paper
         if (trible_box < 0).any():
-          print(index,'Some part of face is out of image ',series.full_path)
           raise Exception("more than 1 or no face found in image ",image_path )
         face_pitch, face_yaw, face_roll = get_rotation_angle(image, first_lmarks) # gen face rotation for filtering
 
       except Exception as ee:        
-        # print('index ',index,': exption ',ee)
+        print(index,': exption ',ee)
         properties_list.append([np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan]) # add null dummy values to current row & skill this iteration
         continue
         
@@ -155,7 +188,7 @@ class Process_WIKI_IMDB():
           tmp_pd = dataframe[chunk_start:chunk_start + chunkSize].copy().reset_index()
           tmp_pd.to_feather(dir_path)
           chunk_start += chunkSize
-      print('succesfully saved as feather to ',dir_path)
+          print('succesfully saved as feather to ',dir_path)
 
 
 
