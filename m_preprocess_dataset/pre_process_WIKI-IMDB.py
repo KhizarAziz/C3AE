@@ -142,6 +142,9 @@ class Process_WIKI_IMDB():
         M = transformation_from_points(landmark_ref[ALIGN_POINTS], landmark[ALIGN_POINTS])
         image = warp_im(image, M, ref_shape)
         #---------------------------------------------------------------------------------------------      
+        
+        _,face_rect_box,lmarks_list = self.detect_faces_and_landmarks(image)
+
         first_lmarks = lmarks_list[0] # getting first face's rectangle box and landmarks 
         trible_box = gen_equal_boundbox(face_rect_box)
 
@@ -151,7 +154,7 @@ class Process_WIKI_IMDB():
         # face_pitch, face_yaw, face_roll = get_rotation_angle(image, first_lmarks) # gen face rotation for filtering
 
       except Exception as ee:        
-        # print(index,': exption ',ee)
+        print(index,': exption ',ee)
         properties_list.append([np.nan,np.nan,np.nan,np.nan,np.nan]) # add null dummy values to current row & skill this iteration
         continue
         
