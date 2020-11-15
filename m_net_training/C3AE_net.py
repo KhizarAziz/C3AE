@@ -78,17 +78,17 @@ def build_net(Categories=12, input_height=64, input_width=64, input_channels=3, 
 
     x1 = Input(shape=(input_height, input_width, input_channels))
     x2 = Input(shape=(input_height, input_width, input_channels))
-    x3 = Input(shape=(input_height, input_width, input_channels))
+    # x3 = Input(shape=(input_height, input_width, input_channels))
 
     y1 = base_model(x1)
     y2 = base_model(x2)
-    y3 = base_model(x3)
+    # y3 = base_model(x3)
 
-    cfeat = Concatenate(axis=-1)([y1, y2, y3])
+    cfeat = Concatenate(axis=-1)([y1, y2])
     bulk_feat = Dense(Categories, use_bias=True, activity_regularizer=regularizers.l1(0), activation='softmax', name="W1")(cfeat)
     age = Dense(1, name="age")(bulk_feat)
     #gender = Dense(2, activation=softmax, activity_regularizer=regularizers.l2(0), name="gender")(cfeat)
 
-    model = Model(inputs=[x1, x2, x3], outputs=[age, bulk_feat]) 
+    # model = Model(inputs=[x1, x2, x3], outputs=[age, bulk_feat]) 
     #age = Lambda(lambda a: tf.reshape(tf.reduce_sum(a * tf.constant([[x * 10.0 for x in range(12)]]), axis=-1), shape=(-1, 1)), name="age")(bulk_feat)
-    return Model(inputs=[x1, x2, x3], outputs=[age, bulk_feat])
+    return Model(inputs=[x1, x2], outputs=[age, bulk_feat])
