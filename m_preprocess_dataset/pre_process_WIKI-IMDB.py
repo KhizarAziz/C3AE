@@ -45,8 +45,6 @@ def gen_equal_boundbox(box,gap_margin=30):
                     [(new_X,new_Y),(new_X2,new_Y2)]]) #  outer box
 
 
-
-
 def calculate_age(dob, image_capture_date):
   birth = datetime.fromordinal(max(int(dob) - 366, 1))
   # assume the photo was taken in the middle of the year
@@ -55,9 +53,7 @@ def calculate_age(dob, image_capture_date):
   else:
       return image_capture_date - birth.year - 1
 
-class Process_WIKI_IMDB():
-
-  
+class Process_WIKI_IMDB():  
   def __init__(self,base_path,dataset_name,extra_padding):
     #init meta.mat file
     self.dataset_name = dataset_name
@@ -126,7 +122,7 @@ class Process_WIKI_IMDB():
         cropped_faces = dlib.get_face_chips(image, lmarks_list, padding=0.8)  # aligned face with padding 0.4 in papper
         # crop2 = dlib.get_face_chips(image, lmarks_list, padding=0.8,size=(64,64))  # aligned face with padding 0.4 in papper
         image = cropped_faces[0] # must be only 1 face, so getting it.
-        _,face_rect_box, lmarks_list = detect_faces_and_landmarks(image) # Detect face from cropped image
+        _,face_rect_box, lmarks_list = self.detect_faces_and_landmarks(image) # Detect face from cropped image
         first_lmarks = lmarks_list[0] # getting first face's rectangle box and landmarks 
         double_box = gen_equal_boundbox(face_rect_box,gap_margin = 30) # get 2 face boxes for nput into network, as reauired in paper
         ####################################Save image to check #######################################
@@ -163,10 +159,11 @@ class Process_WIKI_IMDB():
       if index%500 == 0:
         print(index,'images preprocessed')
     processed_dataset_df = pd.DataFrame(properties_list,columns=['image_path','age','gender','image','org_box','trible_box','yaw','pitch','roll','landmarks'])
+    processed_dataset_df.to_csv('/content/Full_Dataset.csv',index=False)
     # some filtering on df
     processed_dataset_df = processed_dataset_df.dropna()
     processed_dataset_df = processed_dataset_df[(processed_dataset_df.age >= 0) & (processed_dataset_df.age <= 100)]
-    # processed_dataset_df.to_csv('/content/Dataset.csv',index=False)
+    processed_dataset_df.to_csv('/content/Filtered_Dataset.csv',index=False)
     self.Dataset_Df = processed_dataset_df
     return processed_dataset_df # returning now (just in case need to return), maybe later remove...
 
@@ -201,10 +198,10 @@ class Process_WIKI_IMDB():
 Dataset_DF = pd.DataFrame(columns=["age", "gender", "image", "org_box", "trible_box", "landmarks", "roll", "yaw", "pitch"])
 #initiate face detector and predictor
 detector = dlib.get_frontal_face_detector()
-predictor = dlib.shape_predictor("/content/C3AE_keras/detector/shape_predictor_68_face_landmarks.dat")
+predictor = dlib.shape_predictor("/content/C3AE/detect/shape_predictor_68_face_landmarks.dat")
 
 # define all parameters here
-dataset_directory_path = '/content/C3AE_keras/datasets/wiki_crop'
+dataset_directory_path = '/content/C3AE/dataset/wiki_crop'
 dataset_name = 'wiki' # different dataset name means different sequence for loading etc
 # image transform params (if require)
 extra_padding = 0.55
