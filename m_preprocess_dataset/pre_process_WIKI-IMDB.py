@@ -7,6 +7,7 @@ from scipy.io import loadmat
 from pathlib import Path
 from datetime import datetime
 import dlib
+from IPython.core.debugger import set_trace
 from pose import get_rotation_angle,get_landmarks,warp_im,transformation_from_points,get_dummy_refrence_face
 
 # process it to detect faces, detect landmarks, align, & make 3 sub boxes which will be used in next step to feed into network
@@ -84,38 +85,46 @@ class Process_WIKI_IMDB():
 
 
   def detect_faces_and_landmarks(self,image):
-    face_rect_list = detector(image)
+    face_rect_list = detector(image,1)
     img_face_count = len(face_rect_list) # number of faces found in image
     if img_face_count < 1:
+      # print('no faces detectedd,,   ',len(face_rect_list))
       return 0,[],[] # no face found, so return 
 
-    xmin, ymin, xmax, ymax = face_rect_list[0].left() , face_rect_list[0].top(), face_rect_list[0].right(), face_rect_list[0].bottom() # face_rect is dlib.rectangle object, so extracting values from it
+    xmin, ymin, xmax, ymax = face_rect_list[0].rect.left() , face_rect_list[0].rect.top(), face_rect_list[0].rect.right(), face_rect_list[0].rect.bottom() # face_rect is dlib.rectangle object, so extracting values from it
     
     # make a landmarks_list of all faces detected in image
     lmarks_list = dlib.full_object_detections()
     for face_rect in face_rect_list:
-      lmarks_list.append(predictor(image, face_rect)) # getting landmarks as a list of objects
+      lmarks_list.append(predictor(image, face_rect.rect)) # getting landmarks as a list of objects
     
     return img_face_count,np.array([xmin, ymin, xmax, ymax]), lmarks_list
-
 
   def loadData_preprocessData_and_makeDataFrame(self):
     meta_dataframe = pd.read_csv(self.base_path.joinpath(self.dataset_name+'.csv'))
     # init lists of all properties gonna be saved
     properties_list = []
+    # no_face_list = []
     # loop through meta.csv for all images
     for index,series in meta_dataframe.iterrows():
       # clear multiple faces
       image_path = series.full_path
       try:
         #filter out where second face != null (image have 2 faces)
-        if not pd.isnull(series.second_face_score):
-          raise Exception("has second face -> image has 2 face ",image_path )
+        # if not pd.isnull(series.second_face_score):
+        #   raise Exception("has second face -> image has 2 face ",image_path )
+        if (series.age < 1) or (series.age > 100):
+          raise Exception("Age out of bound")
         image = cv2.imread(image_path, cv2.IMREAD_COLOR)
+        if image.shape[0] < 20:
+          raise Exception("image Size is tooooo small") # images are (1,1,3).. dont know why
         # image = cv2.copyMakeBorder(image, self.extra_padding, self.extra_padding, self.extra_padding, self.extra_padding, cv2.BORDER_CONSTANT)
         face_count,_,lmarks_list = self.detect_faces_and_landmarks(image) # Detect face & landmarks
-        if face_count != 1:
-          raise Exception("more than 1 or no face found in image ",image_path )
+        if face_count > 1:
+          raise Exception("face_count > 1")
+        elif face_count < 1:
+          # no_face_list.append([series.full_path,series.age])
+          raise Exception("no face detected")
         # found exactly 1 face, so now process it
         #########################CropFace + genBox###################################
         #extract_image_chips will crop faces from image according to size & padding and align them in upright position and return list of them
@@ -137,11 +146,14 @@ class Process_WIKI_IMDB():
             print('test image saved /content/saved{}_original.jpg'.format(index))
         ###########################################################################
         # detect face landmarks again from cropped & align face.  (as positions of lmarks are changed in cropped image)
+
         if (double_box < 0).any():
           raise Exception('Some part of face is out of image ')
+        
         face_pitch, face_yaw, face_roll = get_rotation_angle(image, first_lmarks) # gen face rotation for filtering
       except Exception as ee:        
         print('index ',index,': exption ',ee,series.full_path)
+        # raise Exception(ee)
         properties_list.append([np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan]) # add null dummy values to current row & skill this iteration
         continue
         
@@ -160,6 +172,8 @@ class Process_WIKI_IMDB():
         print(index,'images preprocessed')
     processed_dataset_df = pd.DataFrame(properties_list,columns=['image_path','age','gender','image','org_box','trible_box','yaw','pitch','roll','landmarks'])
     processed_dataset_df.to_csv('/content/Full_Dataset.csv',index=False)
+    # df = pd.DataFrame(no_face_list,columns=['image_path','age'])
+    df.to_csv('/content/no_face_found.csv')
     # some filtering on df
     processed_dataset_df = processed_dataset_df.dropna()
     processed_dataset_df = processed_dataset_df[(processed_dataset_df.age >= 0) & (processed_dataset_df.age <= 100)]
@@ -197,7 +211,8 @@ class Process_WIKI_IMDB():
 
 Dataset_DF = pd.DataFrame(columns=["age", "gender", "image", "org_box", "trible_box", "landmarks", "roll", "yaw", "pitch"])
 #initiate face detector and predictor
-detector = dlib.get_frontal_face_detector()
+# detector = dlib.get_frontal_face_detector()
+detector = dlib.cnn_face_detection_model_v1('/content/mmod_human_face_detector.dat')
 predictor = dlib.shape_predictor("/content/C3AE/detect/shape_predictor_68_face_landmarks.dat")
 
 # define all parameters here
