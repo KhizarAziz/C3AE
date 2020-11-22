@@ -1,6 +1,6 @@
 from m_net_training import training_utils
 import tensorflow as tf
-from keras.layers import Conv2D,Lambda,Input,BatchNormalization,Activation,AveragePooling2D,GlobalAveragePooling2D,Flatten,ReLU,Dense,multiply,Reshape,Concatenate
+from keras.layers import Conv2D,Lambda,Input,BatchNormalization,Activation,AveragePooling2D,GlobalAveragePooling2D,Flatten,ReLU,Dense,multiply,Reshape,Concatenate,MaxPooling2D,Dropout,Multiply,LeakyReLU
 from keras.activations import sigmoid
 from keras.models import Model
 from keras.utils import plot_model
@@ -92,3 +92,112 @@ def build_net(Categories=12, input_height=64, input_width=64, input_channels=3, 
     # model = Model(inputs=[x1, x2, x3], outputs=[age, bulk_feat]) 
     #age = Lambda(lambda a: tf.reshape(tf.reduce_sum(a * tf.constant([[x * 10.0 for x in range(12)]]), axis=-1), shape=(-1, 1)), name="age")(bulk_feat)
     return Model(inputs=[x1, x2], outputs=[age, bulk_feat])
+
+
+
+
+#-----------------------------
+
+
+
+def SE_BLOCK(input,using_SE=True,r_factor=2):
+  channels_count = input.get_shape()[-1]
+  act = GlobalAveragePooling2D()(input)
+  fc1 = Dense(channels_count//r_factor,activation='relu')(act)
+  scale = Dense(channels_count,activation='sigmoid')(fc1)
+  return multiply([scale,input])
+
+def CBRA(inputs):
+  x = Conv2D(16,(3,3))(inputs)
+  x = BatchNormalization(axis=-1)(x)
+  x = Activation('relu')(x)
+  x = Conv2D(16,(3,3))(inputs)
+  x = BatchNormalization(axis=-1)(x)
+  x = Activation('relu')(x)
+  x_layer = AveragePooling2D(2,2)(x)
+  return x_layer
+
+# stream 2 module
+def CBTM(inputs):
+  s = Conv2D(16,(3,3))(inputs)
+  s = BatchNormalization(axis=-1)(s)
+  s = Activation('tanh')(s)
+  x = Conv2D(16,(3,3))(inputs)
+  x = BatchNormalization(axis=-1)(x)
+  x = Activation('tanh')(x)
+  s_layer = MaxPooling2D(2,2)(s)   
+  return s_layer
+
+
+def PB(inputs):
+  # s_layer2_mix = Flatten()(inputs)
+  s_layer2_mix = GlobalAveragePooling2D()(inputs)
+  s_layer2_mix = Dropout(0.1)(s_layer2_mix)
+  s_layer2_mix = Dense(16,activation='relu')(s_layer2_mix)
+  s_layer2_mix = Dense(3,activation='relu')(s_layer2_mix)
+  return s_layer2_mix
+
+
+
+def first_embd(x1,x2,isPB_Block=False):
+  x = CBRA(x1)
+  y = CBTM(x2)
+
+  if isPB_Block:
+    x = PB(x)
+    y = PB(y)
+    first_embd = Multiply()([x,y])
+    return first_embd
+  else:
+    return x,y
+
+
+def second_embd(x1,x2,isPB_Block=False):
+  x,y = first_embd(x1,x2,False)
+
+  x = CBRA(x)
+  y = CBTM(y)
+
+  if isPB_Block:
+    x = PB(x)
+    y = PB(y)
+    scnd_embd = Multiply()([x,y])
+    return scnd_embd
+  else:
+    return x,y
+
+
+def third_embd(x1,x2):
+  x,y = second_embd(x1,x2,False)
+
+  x = CBRA(x)
+  x = CBRA(x)
+  y = CBTM(y)
+  y = CBTM(y)
+
+  x = PB(x)
+  y = PB(y)
+  scnd_embd = Multiply()([x,y])
+  return scnd_embd
+
+# from IPython.core.debugger import set_trace
+from IPython.core.debugger import set_trace
+
+
+def build_ssr(Categories=12, input_height=64, input_width=64, input_channels=3, using_white_norm=True, using_SE=True):
+
+  x1 = Input(shape=(input_height, input_width, input_channels))
+  w1 = Lambda(white_norm,name='white_norm')(x1)
+  x2 = Input(shape=(input_height, input_width, input_channels))
+  w2 = Lambda(white_norm,name='white_norm_t')(x2)
+  #--------- STREAM 1 ---------
+  frst_embd = first_embd(x1,x2,isPB_Block=True)
+  scnd_embd = second_embd(x1,x2,isPB_Block=True)
+  thrd_embd = third_embd(x1,x2)
+
+
+  cfeat = Concatenate(axis=-1)([frst_embd, scnd_embd,thrd_embd])
+  bulk_feat = Dense(Categories, use_bias=True, activity_regularizer=regularizers.l1(0), activation='softmax', name="W1")(cfeat)
+  age = Dense(1, name="age")(bulk_feat)
+
+  return Model(inputs=[x1, x2], outputs=[age, bulk_feat])
