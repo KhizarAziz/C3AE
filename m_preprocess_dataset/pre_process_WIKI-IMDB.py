@@ -27,23 +27,30 @@ def gen_boundbox(box, landmark):
         [(nose_x - w//2, nose_y - w//2), (nose_x + w//2, nose_y + w//2)]  # inner box
     ])
 
-def gen_equal_boundbox(box,gap_margin=30):
+def gen_equal_boundbox(box,gap_margin=15):
     # getting 3 boxes for face, as required in paper... i.e feed 3 different sized images to network (R,G,B) 
     xmin, ymin, xmax, ymax = box # box is [ymin, xmin, ymax, xmax]
     w, h = xmax - xmin, ymax - ymin
 
-    percentMargin = gap_margin/100 # 30% margin
-    margin_y = int(h * percentMargin)
-    margin_x = int(h * percentMargin)
+    box_array = [[(xmin,ymin),(xmax,ymax)]] # inner-box
 
-    # calculating new coordinates
-    new_X =  xmin - margin_x 
-    new_Y = ymin - margin_y
-    new_X2 = xmax + int(margin_x) # mutliply by 2 because x is going backwards by same value, so adding 2 times margin
-    new_Y2 = ymax + int(margin_y) # mutliply by 2 because y is going Upwards by same value
+    # middle box
+    margin = int(h * gap_margin/100) # 15% margin
+    new_X =  xmin - margin 
+    new_Y = ymin - margin
+    new_X2 = xmax + margin 
+    new_Y2 = ymax + margin 
+    box_array.append([(new_X,new_Y),(new_X2,new_Y2)])
 
-    return np.array([[(xmin,ymin),(xmax,ymax)], # original box
-                    [(new_X,new_Y),(new_X2,new_Y2)]]) #  outer box
+    # outer box
+    margin = int(margin*2) # 30% margin
+    new_X =  xmin - margin 
+    new_Y = ymin - margin
+    new_X2 = xmax + margin 
+    new_Y2 = ymax + margin 
+    box_array.append([(new_X,new_Y),(new_X2,new_Y2)])
+
+    return np.array(box_array)                    
 
 
 def calculate_age(dob, image_capture_date):
@@ -133,11 +140,11 @@ class Process_WIKI_IMDB():
         image = cropped_faces[0] # must be only 1 face, so getting it.
         _,face_rect_box, lmarks_list = self.detect_faces_and_landmarks(image) # Detect face from cropped image
         first_lmarks = lmarks_list[0] # getting first face's rectangle box and landmarks 
-        double_box = gen_equal_boundbox(face_rect_box,gap_margin = 30) # get 2 face boxes for nput into network, as reauired in paper
+        triple_box = gen_equal_boundbox(face_rect_box,gap_margin = 30) # get 2 face boxes for nput into network, as reauired in paper
         ####################################Save image to check #######################################
         test_img = cropped_faces[0]
         if index % 1000 == 0:
-          for bbox in double_box:
+          for bbox in triple_box:
             bbox = bbox
             h_min, w_min = bbox[0]
             h_max, w_max = bbox[1]
@@ -147,7 +154,7 @@ class Process_WIKI_IMDB():
         ###########################################################################
         # detect face landmarks again from cropped & align face.  (as positions of lmarks are changed in cropped image)
 
-        if (double_box < 0).any():
+        if (triple_box < 0).any():
           raise Exception('Some part of face is out of image ')
         
         face_pitch, face_yaw, face_roll = get_rotation_angle(image, first_lmarks) # gen face rotation for filtering
@@ -162,7 +169,7 @@ class Process_WIKI_IMDB():
       image_buffer = buf.tostring()
       #dumping with `pickle` much faster than `json` (np.dumps is pickling)
       face_rect_box_serialized = face_rect_box.dumps()  # [xmin, ymin, xmax, ymax] : Returns the pickle(encoding to binary format (better than json)) of the array as a string. pickle.loads or numpy.loads will convert the string back to an array
-      trible_boxes_serialized = double_box.dumps() # 3 boxes of face as required in paper
+      trible_boxes_serialized = triple_box.dumps() # 3 boxes of face as required in paper
       landmarks_list = np.array([[point.x,point.y] for point in first_lmarks.parts()]) # Same converting landmarks (face_detection_object) to array so can be converted to json
       face_landmarks_serialized = landmarks_list.dumps()#json.dumps(landmarks_list,indent = 2)  # y1..y5, x1..x5
       
