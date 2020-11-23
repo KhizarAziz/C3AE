@@ -152,9 +152,9 @@ class Process_WIKI_IMDB():
         
         face_pitch, face_yaw, face_roll = get_rotation_angle(image, first_lmarks) # gen face rotation for filtering
       except Exception as ee:        
-        print('index ',index,': exption ',ee,series.full_path)
+        # print('index ',index,': exption ',ee,series.full_path)
         # raise Exception(ee)
-        properties_list.append([np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan]) # add null dummy values to current row & skill this iteration
+        properties_list.append([image_path,series.age,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan]) # add null dummy values to current row & skill this iteration
         continue
         
       # everything processed succefuly, now serialize values and save them
@@ -173,7 +173,7 @@ class Process_WIKI_IMDB():
     processed_dataset_df = pd.DataFrame(properties_list,columns=['image_path','age','gender','image','org_box','trible_box','yaw','pitch','roll','landmarks'])
     processed_dataset_df.to_csv('/content/Full_Dataset.csv',index=False)
     # df = pd.DataFrame(no_face_list,columns=['image_path','age'])
-    df.to_csv('/content/no_face_found.csv')
+    # df.to_csv('/content/no_face_found.csv')
     # some filtering on df
     processed_dataset_df = processed_dataset_df.dropna()
     processed_dataset_df = processed_dataset_df[(processed_dataset_df.age >= 0) & (processed_dataset_df.age <= 100)]
@@ -212,7 +212,7 @@ class Process_WIKI_IMDB():
 Dataset_DF = pd.DataFrame(columns=["age", "gender", "image", "org_box", "trible_box", "landmarks", "roll", "yaw", "pitch"])
 #initiate face detector and predictor
 # detector = dlib.get_frontal_face_detector()
-detector = dlib.cnn_face_detection_model_v1('/content/mmod_human_face_detector.dat')
+detector = dlib.cnn_face_detection_model_v1('/content/C3AE/detect/mmod_human_face_detector.dat')
 predictor = dlib.shape_predictor("/content/C3AE/detect/shape_predictor_68_face_landmarks.dat")
 
 # define all parameters here
