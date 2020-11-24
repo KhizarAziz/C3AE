@@ -190,14 +190,17 @@ def build_ssr(Categories=12, input_height=64, input_width=64, input_channels=3, 
   w1 = Lambda(white_norm,name='white_norm')(x1)
   x2 = Input(shape=(input_height, input_width, input_channels))
   w2 = Lambda(white_norm,name='white_norm_t')(x2)
+  x3 = Input(shape=(input_height, input_width, input_channels))
+  w3 = Lambda(white_norm,name='white_norm_t')(x3)
+
   #--------- STREAM 1 ---------
-  frst_embd = first_embd(x1,x2,isPB_Block=True)
-  scnd_embd = second_embd(x1,x2,isPB_Block=True)
-  thrd_embd = third_embd(x1,x2)
+  frst_embd = first_embd(w1,w2,w3,isPB_Block=True)
+  scnd_embd = second_embd(w1,w2,w3,isPB_Block=True)
+  thrd_embd = third_embd(w1,w2,w3)
 
 
   cfeat = Concatenate(axis=-1)([frst_embd, scnd_embd,thrd_embd])
   bulk_feat = Dense(Categories, use_bias=True, activity_regularizer=regularizers.l1(0), activation='softmax', name="W1")(cfeat)
   age = Dense(1, name="age")(bulk_feat)
 
-  return Model(inputs=[x1, x2], outputs=[age, bulk_feat])
+  return Model(inputs=[x1,x2,x3], outputs=[age, bulk_feat])
