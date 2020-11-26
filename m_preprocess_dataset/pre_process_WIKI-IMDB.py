@@ -27,7 +27,7 @@ def gen_boundbox(box, landmark):
         [(nose_x - w//2, nose_y - w//2), (nose_x + w//2, nose_y + w//2)]  # inner box
     ])
 
-def gen_equal_boundbox(box,gap_margin=15):
+def gen_equal_boundbox(box,gap_margin=10):
     # getting 3 boxes for face, as required in paper... i.e feed 3 different sized images to network (R,G,B) 
     xmin, ymin, xmax, ymax = box # box is [ymin, xmin, ymax, xmax]
     w, h = xmax - xmin, ymax - ymin
@@ -140,17 +140,17 @@ class Process_WIKI_IMDB():
         image = cropped_faces[0] # must be only 1 face, so getting it.
         _,face_rect_box, lmarks_list = self.detect_faces_and_landmarks(image) # Detect face from cropped image
         first_lmarks = lmarks_list[0] # getting first face's rectangle box and landmarks 
-        triple_box = gen_equal_boundbox(face_rect_box,gap_margin = 30) # get 2 face boxes for nput into network, as reauired in paper
+        triple_box = gen_equal_boundbox(face_rect_box,gap_margin = 10) # get 2 face boxes for nput into network, as reauired in paper
         ####################################Save image to check #######################################
         test_img = cropped_faces[0]
-        if index % 1000 == 0:
+        if index % 5000 == 0:
           for bbox in triple_box:
             bbox = bbox
             h_min, w_min = bbox[0]
             h_max, w_max = bbox[1]
             cv2.rectangle(test_img, (h_min,w_min), (h_max,w_max),(255,0,0),2)
             cv2.imwrite('/content/saved{}_original.jpg'.format(index),image)
-            print('test image saved /content/saved{}_original.jpg'.format(index))
+          print('test image saved /content/saved{}_original.jpg'.format(index))
         ###########################################################################
         # detect face landmarks again from cropped & align face.  (as positions of lmarks are changed in cropped image)
 
@@ -178,7 +178,7 @@ class Process_WIKI_IMDB():
       if index%500 == 0:
         print(index,'images preprocessed')
     processed_dataset_df = pd.DataFrame(properties_list,columns=['image_path','age','gender','image','org_box','trible_box','yaw','pitch','roll','landmarks'])
-    processed_dataset_df.to_csv('/content/Full_Dataset.csv',index=False)
+    # processed_dataset_df.to_csv('/content/Full_Dataset.csv',index=False)
     # df = pd.DataFrame(no_face_list,columns=['image_path','age'])
     # df.to_csv('/content/no_face_found.csv')
     # some filtering on df
@@ -199,8 +199,7 @@ class Process_WIKI_IMDB():
           tmp_pd = dataframe[chunk_start:chunk_start + chunkSize].copy().reset_index()
           tmp_pd.to_feather(dir_path)
           chunk_start += chunkSize
-      print('succesfully saved as feather to ',dir_path)
-
+          print('succesfully saved as feather to ',dir_path)
 
 
   def rectify_data(self):
@@ -223,7 +222,7 @@ detector = dlib.cnn_face_detection_model_v1('/content/C3AE/detect/mmod_human_fac
 predictor = dlib.shape_predictor("/content/C3AE/detect/shape_predictor_68_face_landmarks.dat")
 
 # define all parameters here
-dataset_directory_path = '/content/C3AE/dataset/wiki_crop'
+dataset_directory_path = '/content/C3AE/dataset/wiki_crop/'
 dataset_name = 'wiki' # different dataset name means different sequence for loading etc
 # image transform params (if require)
 extra_padding = 0.55
