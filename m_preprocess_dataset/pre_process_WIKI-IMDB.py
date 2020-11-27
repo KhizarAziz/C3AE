@@ -27,7 +27,7 @@ def gen_boundbox(box, landmark):
         [(nose_x - w//2, nose_y - w//2), (nose_x + w//2, nose_y + w//2)]  # inner box
     ])
 
-def gen_equal_boundbox(box,gap_margin=10):
+def gen_equal_boundbox(box,gap_margin=20):
     # getting 3 boxes for face, as required in paper... i.e feed 3 different sized images to network (R,G,B) 
     xmin, ymin, xmax, ymax = box # box is [ymin, xmin, ymax, xmax]
     w, h = xmax - xmin, ymax - ymin
@@ -140,7 +140,7 @@ class Process_WIKI_IMDB():
         image = cropped_faces[0] # must be only 1 face, so getting it.
         _,face_rect_box, lmarks_list = self.detect_faces_and_landmarks(image) # Detect face from cropped image
         first_lmarks = lmarks_list[0] # getting first face's rectangle box and landmarks 
-        triple_box = gen_equal_boundbox(face_rect_box,gap_margin = 10) # get 2 face boxes for nput into network, as reauired in paper
+        triple_box = gen_equal_boundbox(face_rect_box) # get 2 face boxes for nput into network, as reauired in paper
         ####################################Save image to check #######################################
         test_img = cropped_faces[0]
         if index % 5000 == 0:

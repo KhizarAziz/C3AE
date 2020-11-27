@@ -183,7 +183,7 @@ def third_embd(x1):
 from IPython.core.debugger import set_trace
 
 
-def build_ssr(Categories=12, input_height, input_width, input_channels, using_white_norm=True, using_SE=True):
+def build_ssr(Categories, input_height, input_width, input_channels, using_white_norm=True, using_SE=True):
 
   input_X = Input(shape=(input_height, input_width, input_channels))
 
