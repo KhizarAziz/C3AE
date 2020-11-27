@@ -8,7 +8,7 @@ from pathlib import Path
 from datetime import datetime
 import dlib
 from IPython.core.debugger import set_trace
-from pose import get_rotation_angle,get_landmarks,warp_im,transformation_from_points,get_dummy_refrence_face
+# from pose import get_rotation_angle,get_landmarks,warp_im,transformation_from_points,get_dummy_refrence_face
 
 # process it to detect faces, detect landmarks, align, & make 3 sub boxes which will be used in next step to feed into network
 # save dataset as pandas,feather & imencode for size efficiency
@@ -53,7 +53,7 @@ def gen_equal_boundbox(box,gap_margin=20):
 
     return np.array(box_array) 
 
-def gen_box_PYR(box,landmarks,gap_margin=20):
+def gen_triple_face_box(box,landmarks,gap_margin=20):
   xmin, ymin, xmax, ymax = box 
   h = xmax - xmin
 
@@ -171,7 +171,7 @@ class Process_WIKI_IMDB():
         image = cropped_faces[0] # must be only 1 face, so getting it.
         _,face_rect_box, lmarks_list = self.detect_faces_and_landmarks(image) # Detect face from cropped image
         first_lmarks = lmarks_list[0] # getting first face's rectangle box and landmarks 
-        triple_box = gen_equal_boundbox(face_rect_box) # get 2 face boxes for nput into network, as reauired in paper
+        triple_box = gen_triple_face_box(face_rect_box,first_lmarks.parts()) # get 2 face boxes for nput into network, as reauired in paper
         ####################################Save image to check #######################################
         test_img = cropped_faces[0]
         if index % 5000 == 0:
@@ -188,11 +188,11 @@ class Process_WIKI_IMDB():
         if (triple_box < 0).any():
           raise Exception('Some part of face is out of image ')
         
-        face_pitch, face_yaw, face_roll = get_rotation_angle(image, first_lmarks) # gen face rotation for filtering
+        # face_pitch, face_yaw, face_roll = get_rotation_angle(image, first_lmarks) # gen face rotation for filtering
       except Exception as ee:        
         # print('index ',index,': exption ',ee,series.full_path)
         # raise Exception(ee)
-        properties_list.append([image_path,series.age,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan]) # add null dummy values to current row & skill this iteration
+        properties_list.append([image_path,series.age,np.nan,np.nan,np.nan,np.nan,np.nan]) # add null dummy values to current row & skill this iteration
         continue
         
       # everything processed succefuly, now serialize values and save them
@@ -205,10 +205,10 @@ class Process_WIKI_IMDB():
       face_landmarks_serialized = landmarks_list.dumps()#json.dumps(landmarks_list,indent = 2)  # y1..y5, x1..x5
       
       # adding everything to list
-      properties_list.append([image_path,series.age,series.gender,image_buffer,face_rect_box_serialized,trible_boxes_serialized,face_yaw,face_pitch,face_roll,face_landmarks_serialized])
+      properties_list.append([image_path,series.age,series.gender,image_buffer,face_rect_box_serialized,trible_boxes_serialized,face_landmarks_serialized])
       if index%500 == 0:
         print(index,'images preprocessed')
-    processed_dataset_df = pd.DataFrame(properties_list,columns=['image_path','age','gender','image','org_box','trible_box','yaw','pitch','roll','landmarks'])
+    processed_dataset_df = pd.DataFrame(properties_list,columns=['image_path','age','gender','image','org_box','trible_box','landmarks'])
     # processed_dataset_df.to_csv('/content/Full_Dataset.csv',index=False)
     # df = pd.DataFrame(no_face_list,columns=['image_path','age'])
     # df.to_csv('/content/no_face_found.csv')
@@ -263,6 +263,6 @@ if __name__ == "__main__":
 
   if dataset_name == 'wiki' or dataset_name == 'imdb': # because structure is same
     dataset_class_ref_object = Process_WIKI_IMDB(dataset_directory_path,dataset_name,extra_padding)
-    dataset_class_ref_object.meta_to_csv(dataset_name) # convert meta.mat to meta.csv
+    dataset_class_ref_object.meta_to_csv(dataset_name,1000) # convert meta.mat to meta.csv
     dataset_class_ref_object.loadData_preprocessData_and_makeDataFrame()
     dataset_class_ref_object.save() # save preprocessed dataset as .feather in  dataset_directory_path
