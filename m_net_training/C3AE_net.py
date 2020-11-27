@@ -98,14 +98,6 @@ def build_net(Categories=12, input_height=64, input_width=64, input_channels=3, 
 #-----------------------------
 
 
-
-def SE_BLOCK(input,using_SE=True,r_factor=2):
-  channels_count = input.get_shape()[-1]
-  act = GlobalAveragePooling2D()(input)
-  fc1 = Dense(channels_count//r_factor,activation='relu')(act)
-  scale = Dense(channels_count,activation='sigmoid')(fc1)
-  return multiply([scale,input])
-
 def CBRA(inputs):
   x = Conv2D(16,(2,2))(inputs)
   x = BatchNormalization(axis=-1)(x)
