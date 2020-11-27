@@ -263,6 +263,6 @@ if __name__ == "__main__":
 
   if dataset_name == 'wiki' or dataset_name == 'imdb': # because structure is same
     dataset_class_ref_object = Process_WIKI_IMDB(dataset_directory_path,dataset_name,extra_padding)
-    dataset_class_ref_object.meta_to_csv(dataset_name,1000) # convert meta.mat to meta.csv
+    dataset_class_ref_object.meta_to_csv(dataset_name) # convert meta.mat to meta.csv
     dataset_class_ref_object.loadData_preprocessData_and_makeDataFrame()
     dataset_class_ref_object.save() # save preprocessed dataset as .feather in  dataset_directory_path
