@@ -21,6 +21,43 @@ def random_erasing(img, dropout=0.3, aspect=(0.5, 2), area=(0.06, 0.10)):
     img[xmin:xmax,ymin:ymax,:] = np.random.random_integers(0, 256, (xmax-xmin, ymax-ymin, 3))
     return img
 
+# generating triple face box.
+def gen_triple_face_box(box,landmarks,gap_margin=20):
+  xmin, ymin, xmax, ymax = box 
+  h = xmax - xmin
+
+  # distance from nose-left_ear & right_ear-nose
+  total_distance,nose_to_left,right_to_nose = landmarks[16].x+landmarks[0].x, landmarks[30].x - landmarks[0].x,landmarks[16].x - landmarks[30].x
+  percent_left = nose_to_left*(total_distance/100)
+  percent_right = right_to_nose*(total_distance/100)
+
+  print(f'total_distance {total_distance}: left {nose_to_left} & right {right_to_nose}')
+  print(f'left {percent_left}% & right {percent_right}%')
+
+  box_array = [[(xmin,ymin),(xmax,ymax)]] # inner-box
+
+  # middle box
+  margin = int(h * gap_margin/100) # 15% margin
+  new_X =  xmin - int((margin*percent_left/100))
+  new_Y = ymin - margin
+  new_X2 = xmax + int((margin*percent_right/100))
+  new_Y2 = ymax + margin 
+  box_array.append([(new_X,new_Y),(new_X2,new_Y2)])
+  print(percent_left/100,int((margin*percent_left/100)))
+  print(percent_right/100,int((margin*percent_right/100)))
+
+  # outer box
+  margin = int(margin*2) # 30% margin
+  new_X =  xmin - int((margin*percent_left/100))
+  new_Y = ymin - margin
+  new_X2 = xmax + int((margin*percent_right/100))
+  new_Y2 = ymax + margin 
+  box_array.append([(new_X,new_Y),(new_X2,new_Y2)])
+
+  return np.array(box_array) 
+
+
+
 
 
 def two_point(age_label, category, interval=10, elips=0.000001):

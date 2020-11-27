@@ -14,6 +14,7 @@ from pose import get_rotation_angle,get_landmarks,warp_im,transformation_from_po
 # save dataset as pandas,feather & imencode for size efficiency
 
 def gen_boundbox(box, landmark):
+  
     # getting 3 boxes for face, as required in paper... i.e feed 3 different sized images to network (R,G,B) 
     xmin, ymin, xmax, ymax = box # box is [ymin, xmin, ymax, xmax]
     w, h = xmax - xmin, ymax - ymin
@@ -50,7 +51,37 @@ def gen_equal_boundbox(box,gap_margin=20):
     new_Y2 = ymax + margin 
     box_array.append([(new_X,new_Y),(new_X2,new_Y2)])
 
-    return np.array(box_array)                    
+    return np.array(box_array) 
+
+def gen_box_PYR(box,landmarks,gap_margin=20):
+  xmin, ymin, xmax, ymax = box 
+  h = xmax - xmin
+
+  # distance from nose-left_ear & right_ear-nose
+  total_distance,nose_to_left,right_to_nose = landmarks[16].x+landmarks[0].x, landmarks[30].x - landmarks[0].x,landmarks[16].x - landmarks[30].x
+  percent_left = nose_to_left*(total_distance/100)
+  percent_right = right_to_nose*(total_distance/100)
+
+  box_array = [[(xmin,ymin),(xmax,ymax)]] # inner-box
+
+  # middle box
+  margin = int(h * gap_margin/100) # 15% margin
+  new_X =  xmin - int((margin*percent_left/100))
+  new_Y = ymin - margin
+  new_X2 = xmax + int((margin*percent_right/100))
+  new_Y2 = ymax + margin 
+  box_array.append([(new_X,new_Y),(new_X2,new_Y2)])
+
+  # outer box
+  margin = int(margin*2) # 30% margin
+  new_X =  xmin - int((margin*percent_left/100))
+  new_Y = ymin - margin
+  new_X2 = xmax + int((margin*percent_right/100))
+  new_Y2 = ymax + margin 
+  box_array.append([(new_X,new_Y),(new_X2,new_Y2)])
+
+  return np.array(box_array) 
+                   
 
 
 def calculate_age(dob, image_capture_date):
