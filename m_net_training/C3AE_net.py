@@ -99,10 +99,10 @@ def build_net(Categories=12, input_height=64, input_width=64, input_channels=3, 
 
 
 def CBRA(inputs):
-  x = Conv2D(16,(2,2))(inputs)
-  x = BatchNormalization(axis=-1)(x)
-  x = Activation('relu')(x)
-  x = Conv2D(16,(2,2))(x)
+  x = Conv2D(16,(4,4))(inputs)
+  # x = BatchNormalization(axis=-1)(x)
+  # x = Activation('relu')(x)
+  # x = Conv2D(16,(2,2))(x)
   x = BatchNormalization(axis=-1)(x)
   x = Activation('relu')(x)
   x_layer = AveragePooling2D(2,2)(x)
@@ -110,12 +110,12 @@ def CBRA(inputs):
 
 # stream 2 module
 def CBTM(inputs):
-  s = Conv2D(16,(2,2))(inputs)
+  s = Conv2D(16,(4,4))(inputs)
+  # s = BatchNormalization(axis=-1)(s)
+  # s = LeakyReLU(alpha=0.1)(s)
+  # s = Conv2D(16,(2,2))(s)
   s = BatchNormalization(axis=-1)(s)
-  s = LeakyReLU(alpha=0.1)(s)
-  s = Conv2D(16,(2,2))(s)
-  s = BatchNormalization(axis=-1)(s)
-  s = LeakyReLU(alpha=0.1)(s)
+  s = Activation('tanh')(s)
   s_layer = MaxPooling2D(2,2)(s)   
   return s_layer
 
@@ -123,7 +123,7 @@ def CBTM(inputs):
 def PB(inputs):
   # s_layer2_mix = Flatten()(inputs)
   s_layer2_mix = GlobalAveragePooling2D()(inputs)
-  s_layer2_mix = Dropout(0.1)(s_layer2_mix)
+  s_layer2_mix = Dropout(0.25)(s_layer2_mix)
   s_layer2_mix = Dense(16,activation='relu')(s_layer2_mix)
   s_layer2_mix = Dense(3,activation='relu')(s_layer2_mix)
   return s_layer2_mix
@@ -195,19 +195,26 @@ def build_ssr(Categories, input_height, input_width, input_channels, using_white
 
 def build_model(Categories=12, input_height=64, input_width=64, input_channels=3, using_white_norm=True, using_SE=True):
   
-  ssr_model = build_ssr(input_height=input_height,input_width=input_width,input_channels=input_channels, using_white_norm=using_white_norm, using_SE=using_SE)
+  input_height2 = 74
+  input_height3 = 81
 
 
+  ssr_model1 = build_ssr(Categories=Categories,input_height=input_height,input_width=input_width,input_channels=input_channels, using_white_norm=using_white_norm, using_SE=using_SE)
   x1 = Input(shape=(input_height, input_width, input_channels))
-  x2 = Input(shape=(input_height, input_width, input_channels))
-  x3 = Input(shape=(input_height, input_width, input_channels))
+  y1 = ssr_model1(x1)
 
-  y1 = ssr_model(x1)
-  y2 = ssr_model(x2)
-  y3 = ssr_model(x3)
+
+  ssr_model2 = build_ssr(Categories=Categories,input_height=input_height2,input_width=input_width,input_channels=input_channels, using_white_norm=using_white_norm, using_SE=using_SE)
+  x2 = Input(shape=(input_height2, input_width, input_channels))
+  y2 = ssr_model2(x2)
+
+
+  ssr_model3 = build_ssr(Categories=Categories,input_height=input_height3,input_width=input_width,input_channels=input_channels, using_white_norm=using_white_norm, using_SE=using_SE)
+  x3 = Input(shape=(input_height3, input_width, input_channels))
+  y3 = ssr_model3(x3)
 
   # set_trace()
-  
+
   cfeat = Concatenate(axis=-1)([y1, y2,y3])
   bulk_feat = Dense(Categories, use_bias=True, activity_regularizer=regularizers.l1(0), activation='softmax', name="W1")(cfeat)
   age = Dense(1, name="age")(bulk_feat)

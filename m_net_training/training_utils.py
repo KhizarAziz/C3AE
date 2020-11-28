@@ -87,22 +87,52 @@ def image_transform(row,dropout,target_img_shape,require_augmentation):
   img = cv2.copyMakeBorder(img, padding, padding, padding, padding, cv2.BORDER_CONSTANT)
   # get trible box (out,middle,inner) and crop image from these boxes then
   tripple_cropped_imgs = []
-  for box in pickle.loads(row['trible_box'],encoding="bytes"): # deserializing object which we converted to binary format using myNumArray.dump() method
-    h_min, w_min = box[0] # xmin,ymin
-    h_max, w_max = box[1] #xmax, ymax
-    # print('img shape {} & trible box {} '.format(img.shape,box))
-    # crop image according to box size and add to list
-    triple_box_cropped = img[w_min+padding:w_max+padding, h_min+padding: h_max+padding] # cropping image
-    triple_box_cropped = cv2.resize(triple_box_cropped, (64,64)) # resize according to size we want
-    tripple_cropped_imgs.append(triple_box_cropped)
+
+#---------------- inner -------------------
+  box1,box2,box3 = pickle.loads(row['trible_box'],encoding="bytes")
+  h_min, w_min = box1[0] # xmin,ymin
+  h_max, w_max = box1[1] #xmax, ymax
+  triple_box_cropped = img[w_min+padding:w_max+padding, h_min+padding: h_max+padding] # cropping image
+  triple_box_cropped = cv2.resize(triple_box_cropped, (64,64)) # resize according to size we want
+  tripple_cropped_imgs.append(triple_box_cropped)
+#--------------------------------------
+
+#---------------- middle -------------------
+  h_min, w_min = box2[0] # xmin,ymin
+  h_max, w_max = box2[1] #xmax, ymax
+  triple_box_cropped = img[w_min+padding:w_max+padding, h_min+padding: h_max+padding] # cropping image
+  triple_box_cropped = cv2.resize(triple_box_cropped, (64,74)) # resize according to size we want
+  tripple_cropped_imgs.append(triple_box_cropped)
+#--------------------------------------
+
+#---------------- outer -------------------
+  h_min, w_min = box3[0] # xmin,ymin
+  h_max, w_max = box3[1] #xmax, ymax
+  triple_box_cropped = img[w_min+padding:w_max+padding, h_min+padding: h_max+padding] # cropping image
+  triple_box_cropped = cv2.resize(triple_box_cropped, (64,81)) # resize according to size we want
+  tripple_cropped_imgs.append(triple_box_cropped)
+#--------------------------------------
+
+
+  # print(tripple_cropped_imgs[0].shape,"\n",tripple_cropped_imgs[1].shape,"\n",tripple_cropped_imgs[2].shape)
+  # raise Exception('aa')
+
+  # for box in pickle.loads(row['trible_box'],encoding="bytes"): # deserializing object which we converted to binary format using myNumArray.dump() method
+  #   h_min, w_min = box[0] # xmin,ymin
+  #   h_max, w_max = box[1] #xmax, ymax
+  #   # print('img shape {} & trible box {} '.format(img.shape,box))
+  #   # crop image according to box size and add to list
+  #   triple_box_cropped = img[w_min+padding:w_max+padding, h_min+padding: h_max+padding] # cropping image
+  #   triple_box_cropped = cv2.resize(triple_box_cropped, (64,84)) # resize according to size we want
+  #   tripple_cropped_imgs.append(triple_box_cropped)
     # image augmentaion (hue, contrast,rotation etc) if needed
-    cascad_imgs = tripple_cropped_imgs
-    if require_augmentation:
-       flag = random.randint(0, 3)
-       contrast = random.uniform(0.5, 2.5)
-       bright = random.uniform(-50, 50)
-       rotation = random.randint(-15, 15)
-       cascad_imgs = [image_enforcing(x, flag, contrast, bright, rotation) for x in cascad_imgs]
+  cascad_imgs = np.array(tripple_cropped_imgs)
+  if require_augmentation:
+      flag = random.randint(0, 3)
+      contrast = random.uniform(0.5, 2.5)
+      bright = random.uniform(-50, 50)
+      rotation = random.randint(-15, 15)
+      cascad_imgs = [image_enforcing(x, flag, contrast, bright, rotation) for x in cascad_imgs]
        
   return cascad_imgs    
 
@@ -117,23 +147,30 @@ def img_and_age_data_generator(dataset_df,category,interval,imgs_shape, batch_si
       idx_to_get = idx[start:start+batch_size] # making a list of random indexes, to get them from dataset
       current_batch = dataset_df.iloc[idx_to_get] # fetching some list, which is our batch
       #load imgs, transform& create a list
-      img_List = []
+      imgs_in = []
+      imgs_mid = []
+      imgs_out = []
       two_point_ages = [] # list for 2_point_rep of ages
       for index,row in current_batch.iterrows(): #iterate over batch to load & transform each img
         # load and transform image
         img = image_transform(row, dropout=dropout,target_img_shape=imgs_shape,require_augmentation=augmentation)
-        img_List.append(img)
+        imgs_in.append(img[0])
+        imgs_mid.append(img[1])
+        imgs_out.append(img[2])
+        # img_List.append(img)
         # make 2_point_represenation(list) of age
         two_point_rep = two_point(int(row.age), category, interval)
         two_point_ages.append(two_point_rep)    
 
-      img_nparray = np.array(img_List) # converting image list to np
+      img_in_nparray = np.array(imgs_in) # converting image list to np
+      img_mid_nparray = np.array(imgs_mid) # converting image list to np
+      img_out_nparray = np.array(imgs_out) # converting image list to np
       two_point_ages_nparray = np.array(two_point_ages) # converting to np
       out = [current_batch.age.to_numpy(),two_point_ages_nparray] # making list of age_array & 2point_reprseation_array
 
       # print(len(two_point_ages_nparray[0]))
 
-      yield [img_nparray[:,0], img_nparray[:,1],img_nparray[:,2]], out # return batch
+      yield [img_in_nparray, img_mid_nparray,img_out_nparray], out # return batch
       start += batch_size # update start point, for next batch
 
 
