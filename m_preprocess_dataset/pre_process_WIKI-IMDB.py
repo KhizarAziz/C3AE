@@ -182,7 +182,7 @@ class Process_WIKI_IMDB():
         triple_box = gen_triple_face_box(face_rect_box,first_lmarks.parts()) # get 2 face boxes for nput into network, as reauired in paper
         ####################################Save image to check #######################################
         test_img = cropped_faces[0]
-        if index % 100 == 0:
+        if index % 5000 == 0:
           for bbox in triple_box:
             bbox = bbox
             h_min, w_min = bbox[0]
