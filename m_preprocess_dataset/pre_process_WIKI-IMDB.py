@@ -53,35 +53,43 @@ def gen_equal_boundbox(box,gap_margin=20):
 
     return np.array(box_array) 
 
-def gen_triple_face_box(box,landmarks,gap_margin=20):
+def get_margin_right_left(landmarks,gap_margin):
+  gap_margin *=2 # because will be calculated on 2 sides
+  # calculate percentange_of_right & percentange_of_left distance from total_distance
+  total_distance,nose_to_left = landmarks[16].x-landmarks[0].x, landmarks[30].x - landmarks[0].x
+  percent_left = nose_to_left*100/total_distance
+  # calculate margin values for right & left side.
+  left_margin = round(gap_margin * percent_left/100)
+  #confirmation of left+right == total_margin
+  right_margin = gap_margin-left_margin
+  return left_margin,right_margin
+
+
+def gen_triple_face_box(box,landmarks,percent_margin=20):
+
   xmin, ymin, xmax, ymax = box 
   h = xmax - xmin
-
-  # distance from nose-left_ear & right_ear-nose
-  total_distance,nose_to_left,right_to_nose = landmarks[16].x+landmarks[0].x, landmarks[30].x - landmarks[0].x,landmarks[16].x - landmarks[30].x
-  percent_left = nose_to_left*(total_distance/100)
-  percent_right = right_to_nose*(total_distance/100)
-
-  box_array = [[(xmin,ymin),(xmax,ymax)]] # inner-box
-
+  #calculate gap value for bigger box
+  gap_margin = round(h * percent_margin/100)
+  # inner-box
+  box_array = [[(xmin,ymin),(xmax,ymax)]]
   # middle box
-  margin = int(h * gap_margin/100) # 15% margin
-  new_X =  xmin - int((margin*percent_left/100))
-  new_Y = ymin - margin
-  new_X2 = xmax + int((margin*percent_right/100))
-  new_Y2 = ymax + margin 
+  left_margin,right_margin = get_margin_right_left(landmarks,gap_margin) # calculate gap_margin right and left
+  new_X =  int(xmin - left_margin)
+  new_Y = int(ymin - gap_margin)
+  new_X2 = int(xmax + right_margin)
+  new_Y2 = int(ymax + gap_margin)
   box_array.append([(new_X,new_Y),(new_X2,new_Y2)])
-
   # outer box
-  margin = int(margin*2) # 30% margin
-  new_X =  xmin - int((margin*percent_left/100))
-  new_Y = ymin - margin
-  new_X2 = xmax + int((margin*percent_right/100))
-  new_Y2 = ymax + margin 
+  gap_margin = gap_margin*2 # because 3rd box will be further outside
+  left_margin,right_margin = get_margin_right_left(landmarks,gap_margin) # calculate gap_margin right and left
+  new_X = int(xmin - left_margin)
+  new_Y = int(ymin - gap_margin)
+  new_X2 =int(xmax + right_margin)
+  new_Y2 =int(ymax + gap_margin)
   box_array.append([(new_X,new_Y),(new_X2,new_Y2)])
 
   return np.array(box_array) 
-                   
 
 
 def calculate_age(dob, image_capture_date):
@@ -174,7 +182,7 @@ class Process_WIKI_IMDB():
         triple_box = gen_triple_face_box(face_rect_box,first_lmarks.parts()) # get 2 face boxes for nput into network, as reauired in paper
         ####################################Save image to check #######################################
         test_img = cropped_faces[0]
-        if index % 5000 == 0:
+        if index % 100 == 0:
           for bbox in triple_box:
             bbox = bbox
             h_min, w_min = bbox[0]
@@ -263,6 +271,6 @@ if __name__ == "__main__":
 
   if dataset_name == 'wiki' or dataset_name == 'imdb': # because structure is same
     dataset_class_ref_object = Process_WIKI_IMDB(dataset_directory_path,dataset_name,extra_padding)
-    dataset_class_ref_object.meta_to_csv(dataset_name) # convert meta.mat to meta.csv
+    dataset_class_ref_object.meta_to_csv(dataset_name,1000) # convert meta.mat to meta.csv
     dataset_class_ref_object.loadData_preprocessData_and_makeDataFrame()
     dataset_class_ref_object.save() # save preprocessed dataset as .feather in  dataset_directory_path
