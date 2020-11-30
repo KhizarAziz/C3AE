@@ -54,7 +54,7 @@ def gen_equal_boundbox(box,gap_margin=20):
     return np.array(box_array) 
 
 def get_margin_right_left(landmarks,gap_margin):
-  gap_margin *=2 # because will be calculated on 2 sides
+  # gap_margin *=2 # because will be calculated on 2 sides
   # calculate percentange_of_right & percentange_of_left distance from total_distance
   total_distance,nose_to_left = landmarks[16].x-landmarks[0].x, landmarks[30].x - landmarks[0].x
   percent_left = nose_to_left*100/total_distance
@@ -64,8 +64,14 @@ def get_margin_right_left(landmarks,gap_margin):
   right_margin = gap_margin-left_margin
   return left_margin,right_margin
 
+def get_margin_up_down_split(gap_margin,down_split=0.3):
+  # calculate margin values for up & down side.
+  down_margin = round(gap_margin * down_split)
+  #confirmation of left+right == total_margin
+  up_margin = gap_margin-down_margin
+  return up_margin,down_margin
 
-def gen_triple_face_box(box,landmarks,percent_margin=18):
+def gen_triple_face_box(box,landmarks,percent_margin=30):
 
   xmin, ymin, xmax, ymax = box 
   h = xmax - xmin
@@ -75,20 +81,21 @@ def gen_triple_face_box(box,landmarks,percent_margin=18):
   box_array = [[(xmin,ymin),(xmax,ymax)]]
   # middle box
   left_margin,right_margin = get_margin_right_left(landmarks,gap_margin) # calculate gap_margin right and left
+  up_margin , down_margin  = get_margin_up_down_split(gap_margin)
   new_X =  int(xmin - left_margin)
-  new_Y = int(ymin - gap_margin)
+  new_Y = int(ymin - up_margin)
   new_X2 = int(xmax + right_margin)
-  new_Y2 = int(ymax + gap_margin)
+  new_Y2 = int(ymax + down_margin)
   box_array.append([(new_X,new_Y),(new_X2,new_Y2)])
   # outer box
   gap_margin = gap_margin*2 # because 3rd box will be further outside
   left_margin,right_margin = get_margin_right_left(landmarks,gap_margin) # calculate gap_margin right and left
+  up_margin , down_margin  = get_margin_up_down_split(gap_margin)
   new_X = int(xmin - left_margin)
-  new_Y = int(ymin - gap_margin)
+  new_Y = int(ymin - up_margin)
   new_X2 =int(xmax + right_margin)
-  new_Y2 =int(ymax + gap_margin)
+  new_Y2 =int(ymax + down_margin)
   box_array.append([(new_X,new_Y),(new_X2,new_Y2)])
-
   return np.array(box_array) 
 
 
@@ -174,7 +181,7 @@ class Process_WIKI_IMDB():
         # found exactly 1 face, so now process it
         #########################CropFace + genBox###################################
         #extract_image_chips will crop faces from image according to size & padding and align them in upright position and return list of them
-        cropped_faces = dlib.get_face_chips(image, lmarks_list, padding=0.8)  # aligned face with padding 0.4 in papper
+        cropped_faces = dlib.get_face_chips(image, lmarks_list, padding=0.99,size=200)  # aligned face with padding 0.4 in papper
         # crop2 = dlib.get_face_chips(image, lmarks_list, padding=0.8,size=(64,64))  # aligned face with padding 0.4 in papper
         image = cropped_faces[0] # must be only 1 face, so getting it.
         _,face_rect_box, lmarks_list = self.detect_faces_and_landmarks(image) # Detect face from cropped image
@@ -271,6 +278,6 @@ if __name__ == "__main__":
 
   if dataset_name == 'wiki' or dataset_name == 'imdb': # because structure is same
     dataset_class_ref_object = Process_WIKI_IMDB(dataset_directory_path,dataset_name,extra_padding)
-    dataset_class_ref_object.meta_to_csv(dataset_name,1000) # convert meta.mat to meta.csv
+    dataset_class_ref_object.meta_to_csv(dataset_name) # convert meta.mat to meta.csv
     dataset_class_ref_object.loadData_preprocessData_and_makeDataFrame()
     dataset_class_ref_object.save() # save preprocessed dataset as .feather in  dataset_directory_path
