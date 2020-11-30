@@ -65,7 +65,7 @@ def get_margin_right_left(landmarks,gap_margin):
   return left_margin,right_margin
 
 
-def gen_triple_face_box(box,landmarks,percent_margin=20):
+def gen_triple_face_box(box,landmarks,percent_margin=18):
 
   xmin, ymin, xmax, ymax = box 
   h = xmax - xmin

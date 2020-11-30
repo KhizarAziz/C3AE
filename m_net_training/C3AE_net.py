@@ -112,7 +112,7 @@ def CBRA(inputs):
 def CBTM(inputs):
   s = Conv2D(16,(4,4))(inputs)
   # s = BatchNormalization(axis=-1)(s)
-  # s = LeakyReLU(alpha=0.1)(s)
+  # s = Activation('tanh')(s)
   # s = Conv2D(16,(2,2))(s)
   s = BatchNormalization(axis=-1)(s)
   s = Activation('tanh')(s)
@@ -123,8 +123,8 @@ def CBTM(inputs):
 def PB(inputs):
   # s_layer2_mix = Flatten()(inputs)
   s_layer2_mix = GlobalAveragePooling2D()(inputs)
-  s_layer2_mix = Dropout(0.25)(s_layer2_mix)
-  s_layer2_mix = Dense(16,activation='relu')(s_layer2_mix)
+  s_layer2_mix = Dropout(0.2)(s_layer2_mix)
+  s_layer2_mix = Dense(12,activation='relu')(s_layer2_mix)
   s_layer2_mix = Dense(3,activation='relu')(s_layer2_mix)
   return s_layer2_mix
 
@@ -179,7 +179,6 @@ def build_ssr(Categories, input_height, input_width, input_channels, using_white
 
   input_X = Input(shape=(input_height, input_width, input_channels))
 
-
   w1 = Lambda(white_norm,name='white_norm')(input_X)
   #--------- STREAM 1 ---------
   frst_embd = first_embd(w1,isPB_Block=True)
@@ -195,23 +194,16 @@ def build_ssr(Categories, input_height, input_width, input_channels, using_white
 
 def build_model(Categories=12, input_height=64, input_width=64, input_channels=3, using_white_norm=True, using_SE=True):
   
-  input_height2 = 74
-  input_height3 = 81
-
-
-  ssr_model1 = build_ssr(Categories=Categories,input_height=input_height,input_width=input_width,input_channels=input_channels, using_white_norm=using_white_norm, using_SE=using_SE)
   x1 = Input(shape=(input_height, input_width, input_channels))
-  y1 = ssr_model1(x1)
+  x2 = Input(shape=(input_height, input_width, input_channels))
+  x3 = Input(shape=(input_height, input_width, input_channels))
 
+  ssr_model = build_ssr(Categories=Categories,input_height=input_height,input_width=input_width,input_channels=input_channels, using_white_norm=using_white_norm, using_SE=using_SE)
 
-  ssr_model2 = build_ssr(Categories=Categories,input_height=input_height2,input_width=input_width,input_channels=input_channels, using_white_norm=using_white_norm, using_SE=using_SE)
-  x2 = Input(shape=(input_height2, input_width, input_channels))
-  y2 = ssr_model2(x2)
+  y1 = ssr_model(x1)
+  y2 = ssr_model(x2)
+  y3 = ssr_model(x3)
 
-
-  ssr_model3 = build_ssr(Categories=Categories,input_height=input_height3,input_width=input_width,input_channels=input_channels, using_white_norm=using_white_norm, using_SE=using_SE)
-  x3 = Input(shape=(input_height3, input_width, input_channels))
-  y3 = ssr_model3(x3)
 
   # set_trace()
 
