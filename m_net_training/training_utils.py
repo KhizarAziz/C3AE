@@ -21,41 +21,51 @@ def random_erasing(img, dropout=0.3, aspect=(0.5, 2), area=(0.06, 0.10)):
     img[xmin:xmax,ymin:ymax,:] = np.random.random_integers(0, 256, (xmax-xmin, ymax-ymin, 3))
     return img
 
-# generating triple face box.
-def gen_triple_face_box(box,landmarks,gap_margin=20):
+
+def get_margin_right_left(landmarks,gap_margin):
+  # gap_margin *=2 # because will be calculated on 2 sides
+  # calculate percentange_of_right & percentange_of_left distance from total_distance
+  total_distance,nose_to_left = landmarks[16][0]-landmarks[0][0], landmarks[30][0] - landmarks[0][0]
+  percent_left = nose_to_left*100/total_distance
+  # calculate margin values for right & left side.
+  left_margin = round(gap_margin * percent_left/100)
+  #confirmation of left+right == total_margin
+  right_margin = gap_margin-left_margin
+  return left_margin,right_margin
+
+def get_margin_up_down_split(gap_margin,down_split=0.3):
+  # calculate margin values for up & down side.
+  down_margin = round(gap_margin * down_split)
+  #confirmation of left+right == total_margin
+  up_margin = gap_margin-down_margin
+  return up_margin,down_margin
+
+
+def gen_triple_face_box(box,landmarks,percent_margin=30):
   xmin, ymin, xmax, ymax = box 
   h = xmax - xmin
-
-  # distance from nose-left_ear & right_ear-nose
-  total_distance,nose_to_left,right_to_nose = landmarks[16].x+landmarks[0].x, landmarks[30].x - landmarks[0].x,landmarks[16].x - landmarks[30].x
-  percent_left = nose_to_left*(total_distance/100)
-  percent_right = right_to_nose*(total_distance/100)
-
-  print(f'total_distance {total_distance}: left {nose_to_left} & right {right_to_nose}')
-  print(f'left {percent_left}% & right {percent_right}%')
-
-  box_array = [[(xmin,ymin),(xmax,ymax)]] # inner-box
-
+  #calculate gap value for bigger box
+  gap_margin = round(h * percent_margin/100)
+  # inner-box
+  box_array = [[(xmin,ymin),(xmax,ymax)]]
   # middle box
-  margin = int(h * gap_margin/100) # 15% margin
-  new_X =  xmin - int((margin*percent_left/100))
-  new_Y = ymin - margin
-  new_X2 = xmax + int((margin*percent_right/100))
-  new_Y2 = ymax + margin 
+  left_margin,right_margin = get_margin_right_left(landmarks,gap_margin) # calculate gap_margin right and left
+  up_margin , down_margin  = get_margin_up_down_split(gap_margin)
+  new_X =  int(xmin - left_margin)
+  new_Y = int(ymin - up_margin)
+  new_X2 = int(xmax + right_margin)
+  new_Y2 = int(ymax + down_margin)
   box_array.append([(new_X,new_Y),(new_X2,new_Y2)])
-  print(percent_left/100,int((margin*percent_left/100)))
-  print(percent_right/100,int((margin*percent_right/100)))
-
   # outer box
-  margin = int(margin*2) # 30% margin
-  new_X =  xmin - int((margin*percent_left/100))
-  new_Y = ymin - margin
-  new_X2 = xmax + int((margin*percent_right/100))
-  new_Y2 = ymax + margin 
+  gap_margin = gap_margin*2 # because 3rd box will be further outside
+  left_margin,right_margin = get_margin_right_left(landmarks,gap_margin) # calculate gap_margin right and left
+  up_margin , down_margin  = get_margin_up_down_split(gap_margin)
+  new_X = int(xmin - left_margin)
+  new_Y = int(ymin - up_margin)
+  new_X2 =int(xmax + right_margin)
+  new_Y2 =int(ymax + down_margin)
   box_array.append([(new_X,new_Y),(new_X2,new_Y2)])
-
   return np.array(box_array) 
-
 
 
 
@@ -82,42 +92,21 @@ def image_transform(row,dropout,target_img_shape,require_augmentation):
   #add random noise
   if require_augmentation:
     img = random_erasing(img,dropout=dropout)
-  #add padding, incase any face location is negative (face is not full)
-  padding = 50
-  img = cv2.copyMakeBorder(img, padding, padding, padding, padding, cv2.BORDER_CONSTANT)
   # get trible box (out,middle,inner) and crop image from these boxes then
+  face_lm = pickle.loads(row['landmarks'],encoding="bytes")
+  face_box = pickle.loads(row['org_box'],encoding="bytes")
+  triple_box= gen_triple_face_box(face_box,face_lm,percent_margin=45)
+
+  #if contains a negative value, add padding to image.
+  if triple_box.min() < 0:
+    padding = np.abs(triple_box.min()) + 1
+  else:
+    padding = 0
+  
+  img = cv2.copyMakeBorder(img, padding, padding, padding, padding, cv2.BORDER_CONSTANT)
   tripple_cropped_imgs = []
-
-#---------------- inner -------------------
-#   box1,box2,box3 = pickle.loads(row['trible_box'],encoding="bytes")
-#   h_min, w_min = box1[0] # xmin,ymin
-#   h_max, w_max = box1[1] #xmax, ymax
-#   triple_box_cropped = img[w_min+padding:w_max+padding, h_min+padding: h_max+padding] # cropping image
-#   triple_box_cropped = cv2.resize(triple_box_cropped, (64,64)) # resize according to size we want
-#   tripple_cropped_imgs.append(triple_box_cropped)
-# #--------------------------------------
-
-# #---------------- middle -------------------
-#   h_min, w_min = box2[0] # xmin,ymin
-#   h_max, w_max = box2[1] #xmax, ymax
-#   triple_box_cropped = img[w_min+padding:w_max+padding, h_min+padding: h_max+padding] # cropping image
-#   triple_box_cropped = cv2.resize(triple_box_cropped, (64,74)) # resize according to size we want
-#   tripple_cropped_imgs.append(triple_box_cropped)
-# #--------------------------------------
-
-# #---------------- outer -------------------
-#   h_min, w_min = box3[0] # xmin,ymin
-#   h_max, w_max = box3[1] #xmax, ymax
-#   triple_box_cropped = img[w_min+padding:w_max+padding, h_min+padding: h_max+padding] # cropping image
-#   triple_box_cropped = cv2.resize(triple_box_cropped, (64,81)) # resize according to size we want
-#   tripple_cropped_imgs.append(triple_box_cropped)
-#--------------------------------------
-
-
-  # print(tripple_cropped_imgs[0].shape,"\n",tripple_cropped_imgs[1].shape,"\n",tripple_cropped_imgs[2].shape)
-  # raise Exception('aa')
-
-  for box in pickle.loads(row['trible_box'],encoding="bytes"): # deserializing object which we converted to binary format using myNumArray.dump() method
+  # for box in pickle.loads(row['trible_box'],encoding="bytes"): # deserializing object which we converted to binary format using myNumArray.dump() method
+  for box in triple_box: # deserializing object which we converted to binary format using myNumArray.dump() method
     h_min, w_min = box[0] # xmin,ymin
     h_max, w_max = box[1] #xmax, ymax
     # print('img shape {} & trible box {} '.format(img.shape,box))

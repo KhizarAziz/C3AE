@@ -186,28 +186,28 @@ class Process_WIKI_IMDB():
         image = cropped_faces[0] # must be only 1 face, so getting it.
         _,face_rect_box, lmarks_list = self.detect_faces_and_landmarks(image) # Detect face from cropped image
         first_lmarks = lmarks_list[0] # getting first face's rectangle box and landmarks 
-        triple_box = gen_triple_face_box(face_rect_box,first_lmarks.parts()) # get 2 face boxes for nput into network, as reauired in paper
+        # triple_box = gen_triple_face_box(face_rect_box,first_lmarks.parts()) # get 2 face boxes for nput into network, as reauired in paper
         ####################################Save image to check #######################################
-        test_img = cropped_faces[0]
-        if index % 5000 == 0:
-          for bbox in triple_box:
-            bbox = bbox
-            h_min, w_min = bbox[0]
-            h_max, w_max = bbox[1]
-            cv2.rectangle(test_img, (h_min,w_min), (h_max,w_max),(255,0,0),2)
-            cv2.imwrite('/content/saved{}_original.jpg'.format(index),image)
-          print('test image saved /content/saved{}_original.jpg'.format(index))
+        # test_img = cropped_faces[0]
+        # if index % 5000 == 0:
+        #   for bbox in triple_box:
+        #     bbox = bbox
+        #     h_min, w_min = bbox[0]
+        #     h_max, w_max = bbox[1]
+        #     cv2.rectangle(test_img, (h_min,w_min), (h_max,w_max),(255,0,0),2)
+        #     cv2.imwrite('/content/saved{}_original.jpg'.format(index),image)
+        #   print('test image saved /content/saved{}_original.jpg'.format(index))
         ###########################################################################
         # detect face landmarks again from cropped & align face.  (as positions of lmarks are changed in cropped image)
 
-        if (triple_box < 0).any():
-          raise Exception('Some part of face is out of image ')
+        # if (triple_box < 0).any():
+        #   raise Exception('Some part of face is out of image ')
         
         # face_pitch, face_yaw, face_roll = get_rotation_angle(image, first_lmarks) # gen face rotation for filtering
       except Exception as ee:        
         # print('index ',index,': exption ',ee,series.full_path)
         # raise Exception(ee)
-        properties_list.append([image_path,series.age,np.nan,np.nan,np.nan,np.nan,np.nan]) # add null dummy values to current row & skill this iteration
+        properties_list.append([image_path,series.age,np.nan,np.nan,np.nan,np.nan]) # add null dummy values to current row & skill this iteration
         continue
         
       # everything processed succefuly, now serialize values and save them
@@ -215,15 +215,15 @@ class Process_WIKI_IMDB():
       image_buffer = buf.tostring()
       #dumping with `pickle` much faster than `json` (np.dumps is pickling)
       face_rect_box_serialized = face_rect_box.dumps()  # [xmin, ymin, xmax, ymax] : Returns the pickle(encoding to binary format (better than json)) of the array as a string. pickle.loads or numpy.loads will convert the string back to an array
-      trible_boxes_serialized = triple_box.dumps() # 3 boxes of face as required in paper
+      # trible_boxes_serialized = triple_box.dumps() # 3 boxes of face as required in paper
       landmarks_list = np.array([[point.x,point.y] for point in first_lmarks.parts()]) # Same converting landmarks (face_detection_object) to array so can be converted to json
       face_landmarks_serialized = landmarks_list.dumps()#json.dumps(landmarks_list,indent = 2)  # y1..y5, x1..x5
       
       # adding everything to list
-      properties_list.append([image_path,series.age,series.gender,image_buffer,face_rect_box_serialized,trible_boxes_serialized,face_landmarks_serialized])
+      properties_list.append([image_path,series.age,series.gender,image_buffer,face_rect_box_serialized,face_landmarks_serialized])
       if index%500 == 0:
         print(index,'images preprocessed')
-    processed_dataset_df = pd.DataFrame(properties_list,columns=['image_path','age','gender','image','org_box','trible_box','landmarks'])
+    processed_dataset_df = pd.DataFrame(properties_list,columns=['image_path','age','gender','image','org_box','landmarks'])
     # processed_dataset_df.to_csv('/content/Full_Dataset.csv',index=False)
     # df = pd.DataFrame(no_face_list,columns=['image_path','age'])
     # df.to_csv('/content/no_face_found.csv')
