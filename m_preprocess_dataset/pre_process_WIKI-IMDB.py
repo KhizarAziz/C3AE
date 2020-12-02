@@ -181,7 +181,7 @@ class Process_WIKI_IMDB():
         # found exactly 1 face, so now process it
         #########################CropFace + genBox###################################
         #extract_image_chips will crop faces from image according to size & padding and align them in upright position and return list of them
-        cropped_faces = dlib.get_face_chips(image, lmarks_list, padding=0.99,size=200)  # aligned face with padding 0.4 in papper
+        cropped_faces = dlib.get_face_chips(image, lmarks_list, padding=0.99)  # aligned face with padding 0.4 in papper
         # crop2 = dlib.get_face_chips(image, lmarks_list, padding=0.8,size=(64,64))  # aligned face with padding 0.4 in papper
         image = cropped_faces[0] # must be only 1 face, so getting it.
         _,face_rect_box, lmarks_list = self.detect_faces_and_landmarks(image) # Detect face from cropped image
