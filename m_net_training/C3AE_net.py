@@ -94,46 +94,53 @@ def build_net(Categories=12, input_height=64, input_width=64, input_channels=3, 
     return Model(inputs=[x1, x2], outputs=[age, bulk_feat])
 
 
-
-#-----------------------------
-
-
 def CBRA(inputs):
-  x = Conv2D(16,(4,4))(inputs)
-  # x = BatchNormalization(axis=-1)(x)
-  # x = Activation('relu')(x)
-  # x = Conv2D(16,(2,2))(x)
+  x = Conv2D(32,(3,3))(inputs)
   x = BatchNormalization(axis=-1)(x)
   x = Activation('relu')(x)
+  x = SE_BLOCK(input=x)
+  x = Dropout(0.2)(x)
+  x = Conv2D(32,(5,5))(x)
+  x = BatchNormalization(axis=-1)(x)
+  x = Activation('relu')(x)
+  x = SE_BLOCK(input=x)
   x_layer = AveragePooling2D(2,2)(x)
   return x_layer
 
 # stream 2 module
 def CBTM(inputs):
-  s = Conv2D(16,(4,4))(inputs)
-  # s = BatchNormalization(axis=-1)(s)
-  # s = Activation('tanh')(s)
-  # s = Conv2D(16,(2,2))(s)
+  s = Conv2D(2,(1,1))(inputs)
   s = BatchNormalization(axis=-1)(s)
   s = Activation('tanh')(s)
+  s = SE_BLOCK(input=s)
+  s = Conv2D(4,(2,2))(inputs)
+  s = BatchNormalization(axis=-1)(s)
+  s = Activation('tanh')(s)
+  s = SE_BLOCK(input=s)
+  s = Dropout(0.2)(s)
+  s = Conv2D(8,(3,3))(inputs)
+  s = BatchNormalization(axis=-1)(s)
+  s = Activation('tanh')(s)
+  s = SE_BLOCK(input=s)
+  s = Dropout(0.2)(s)    
+  s = Conv2D(16,(5,5))(s)
+  s = BatchNormalization(axis=-1)(s)
+  s = Activation('tanh')(s)
+  s = SE_BLOCK(input=s)
   s_layer = MaxPooling2D(2,2)(s)   
   return s_layer
-
 
 def PB(inputs):
   # s_layer2_mix = Flatten()(inputs)
   s_layer2_mix = GlobalAveragePooling2D()(inputs)
   s_layer2_mix = Dropout(0.2)(s_layer2_mix)
-  s_layer2_mix = Dense(12,activation='relu')(s_layer2_mix)
+  s_layer2_mix = Dense(12,activation='relu',activity_regularizer=regularizers.l1(0))(s_layer2_mix)
   s_layer2_mix = Dense(3,activation='relu')(s_layer2_mix)
   return s_layer2_mix
-
-
 
 def first_embd(x1,isPB_Block=False):
   x = CBRA(x1)
   y = CBTM(x1)
-
   if isPB_Block:
     x = PB(x)
     y = PB(y)
@@ -142,13 +149,10 @@ def first_embd(x1,isPB_Block=False):
   else:
     return x,y
 
-
 def second_embd(x1,isPB_Block=False):
   x,y = first_embd(x1,False)
-
   x = CBRA(x)
   y = CBTM(y)
-
   if isPB_Block:
     x = PB(x)
     y = PB(y)
@@ -157,121 +161,38 @@ def second_embd(x1,isPB_Block=False):
   else:
     return x,y
 
-
 def third_embd(x1):
   x,y = second_embd(x1,False)
-
-  x = CBRA(x)
   x = CBRA(x)
   y = CBTM(y)
-  y = CBTM(y)
-
   x = PB(x)
   y = PB(y)
   scnd_embd = Multiply()([x,y])
   return scnd_embd
 
-# from IPython.core.debugger import set_trace
-from IPython.core.debugger import set_trace
-
 
 def build_ssr(Categories, input_height, input_width, input_channels, using_white_norm=True, using_SE=True):
-
   input_X = Input(shape=(input_height, input_width, input_channels))
-
   w1 = Lambda(white_norm,name='white_norm')(input_X)
   #--------- STREAM 1 ---------
   frst_embd = first_embd(w1,isPB_Block=True)
   scnd_embd = second_embd(w1,isPB_Block=True)
   thrd_embd = third_embd(w1)
-
-  # set_trace()
   cfeat = Concatenate(axis=-1)([frst_embd, scnd_embd,thrd_embd])
-
-  return Model(inputs=[input_X], outputs=[cfeat])
-
+  return Model(inputs=[input_X], outputs=[cfeat],name='SRAE')
 
 
 def build_model(Categories=12, input_height=64, input_width=64, input_channels=3, using_white_norm=True, using_SE=True):
-  
   x1 = Input(shape=(input_height, input_width, input_channels))
   x2 = Input(shape=(input_height, input_width, input_channels))
   x3 = Input(shape=(input_height, input_width, input_channels))
-
   ssr_model = build_ssr(Categories=Categories,input_height=input_height,input_width=input_width,input_channels=input_channels, using_white_norm=using_white_norm, using_SE=using_SE)
 
   y1 = ssr_model(x1)
   y2 = ssr_model(x2)
   y3 = ssr_model(x3)
 
-
-  # set_trace()
-
   cfeat = Concatenate(axis=-1)([y1, y2,y3])
   bulk_feat = Dense(Categories, use_bias=True, activity_regularizer=regularizers.l1(0), activation='softmax', name="W1")(cfeat)
-  age = Dense(1, name="age")(bulk_feat)
-  
+  age = Dense(1, name="age")(bulk_feat)  
   return Model(inputs=[x1,x2,x3], outputs=[age, bulk_feat])
-
-# ----------------------------------NEW NET-----------------------------
-
-def CBTM2(input_height=64, input_width=64, input_channels=3):
-  input_X = Input(shape=(input_height, input_width, input_channels))
-  w1 = Lambda(white_norm,name='white_norm')(input_X)
-  s = Conv2D(16,(4,4))(w1)
-  s = BatchNormalization(axis=-1)(s)
-  s = Activation('tanh')(s)
-  s = MaxPooling2D(2,2)(s)
-  s = Conv2D(32,(4,4))(s)
-  s = BatchNormalization(axis=-1)(s)
-  s = Activation('tanh')(s)
-  s = MaxPooling2D(2,2)(s)
-  s = Conv2D(64,(2,2))(s)
-  s = BatchNormalization(axis=-1)(s)
-  s = Activation('tanh')(s) 
-  outtt = GlobalAveragePooling2D()(s)
-  outtt = Dense(8,activation='relu')(outtt)
-  return Model(inputs=[input_X], outputs=[outtt])
-
-
-def CBRA2(input_height=64, input_width=64, input_channels=3):
-  input_R = Input(shape=(input_height, input_width, input_channels))
-  w1 = Lambda(white_norm,name='white_norm')(input_R)
-  s = Conv2D(16,(4,4))(w1)
-  s = BatchNormalization(axis=-1)(s)
-  s = Activation('relu')(s)
-  s = AveragePooling2D(2,2)(s)
-  s = Conv2D(32,(4,4))(s)
-  s = BatchNormalization(axis=-1)(s)
-  s = Activation('relu')(s)
-  s = AveragePooling2D(2,2)(s)
-  s = Conv2D(64,(2,2))(s)
-  s = BatchNormalization(axis=-1)(s)
-  s = Activation('relu')(s)
-  outt = GlobalAveragePooling2D()(s)
-  outt = Dense(8,activation='relu')(outt)
-  return Model(inputs=[input_R], outputs=[outt])
-
-
-def model_new(Categories=12, input_height=64, input_width=64, input_channels=3, using_white_norm=True, using_SE=True):
-
-  x1 = Input(shape=(input_height, input_width, input_channels))
-  x2 = Input(shape=(input_height, input_width, input_channels))
-  x3 = Input(shape=(input_height, input_width, input_channels))
-
-  CBT = CBTM2(input_height=input_height,input_width=input_width,input_channels=input_channels)
-  CBR = CBRA2(input_height=input_height,input_width=input_width,input_channels=input_channels)
-
-  # set_trace()
-  y1 = CBT(x1)
-  y2 = CBT(x2)
-  y3 = CBR(x3)
-
-  cfeat = Concatenate(axis=-1)([y1,y2,y3])
-  cfeat = Dropout(0.3)(cfeat)
-  Fc1 = Dense(120, use_bias=True, activity_regularizer=regularizers.l1(0), activation=LeakyReLU(alpha=0.1), name="FC1")(cfeat)
-  bulk_feat = Dense(Categories, use_bias=True, activity_regularizer=regularizers.l1(0), activation='softmax', name="W1")(Fc1)
-  age = Dense(1, name="age")(bulk_feat)
-  
-  return Model(inputs=[x1,x2,x3], outputs=[age, bulk_feat])
-
