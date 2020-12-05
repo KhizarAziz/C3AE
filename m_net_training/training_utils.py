@@ -5,7 +5,7 @@ import random
 import keras.backend as K
 
 # adding random box in image with random colored pixels, it makes model generic????
-def random_erasing(img, dropout=0.3, aspect=(0.5, 2), area=(0.06, 0.10)):
+def random_img_erasing(img, dropout=0.3, aspect=(0.5, 2), area=(0.06, 0.10)):
     # https://arxiv.org/pdf/1708.04896.pdf
     if 1 - random.random() > dropout:
         return img
@@ -84,14 +84,13 @@ def two_point(age_label, category, interval=10, elips=0.000001):
     return np.array(age_split(age_label))
 
 
-
-def image_transform(row,dropout,target_img_shape,require_augmentation):
+def image_transform(row,dropout,target_img_shape,random_erasing=False,random_enforcing=False):
   # read image from buffer then decode
   img = np.frombuffer(row["image"], np.uint8)
   img = cv2.imdecode(img, cv2.IMREAD_COLOR)
   #add random noise
-  if require_augmentation:
-    img = random_erasing(img,dropout=dropout)
+  if random_erasing:
+    img = random_img_erasing(img,dropout=dropout)
   # get trible box (out,middle,inner) and crop image from these boxes then
   face_lm = pickle.loads(row['landmarks'],encoding="bytes")
   face_box = pickle.loads(row['org_box'],encoding="bytes")
@@ -116,17 +115,17 @@ def image_transform(row,dropout,target_img_shape,require_augmentation):
     tripple_cropped_imgs.append(triple_box_cropped)
     #image augmentaion (hue, contrast,rotation etc) if needed
   cascad_imgs = np.array(tripple_cropped_imgs)
-  # if require_augmentation:
-  #     flag = random.randint(0, 3)
-  #     contrast = random.uniform(0.5, 2.5)
-  #     bright = random.uniform(-50, 50)
-  #     rotation = random.randint(-15, 15)
-  #     cascad_imgs = [image_enforcing(x, flag, contrast, bright, rotation) for x in cascad_imgs]
+  if random_erasing:
+      flag = random.randint(0, 3)
+      contrast = random.uniform(0.5, 2.5)
+      bright = random.uniform(-50, 50)
+      rotation = random.randint(-15, 215)
+      cascad_imgs = [image_enforcing(x, flag, contrast, bright, rotation) for x in cascad_imgs]
        
   return cascad_imgs    
 
 
-def img_and_age_data_generator(dataset_df,category,interval,imgs_shape, batch_size,augmentation,dropout):
+def img_and_age_data_generator(dataset_df,batch_size = 32, category=12, interval=10,imgs_shape =(64,64), random_erasing=False,random_enforcing=False, dropout = 0.2):
   dataset_df = dataset_df.reset_index(drop=True)
   df_count = len(dataset_df)
   while True:
@@ -140,7 +139,7 @@ def img_and_age_data_generator(dataset_df,category,interval,imgs_shape, batch_si
       two_point_ages = [] # list for 2_point_rep of ages
       for index,row in current_batch.iterrows(): #iterate over batch to load & transform each img
         # load and transform image
-        img = image_transform(row, dropout=dropout,target_img_shape=imgs_shape,require_augmentation=augmentation)
+        img = image_transform(row, dropout=dropout,target_img_shape=imgs_shape,random_erasing=random_erasing,random_enforcing=random_enforcing)
         img_List.append(img)
         # make 2_point_represenation(list) of age
         two_point_rep = two_point(int(row.age), category, interval)

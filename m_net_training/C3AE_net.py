@@ -6,12 +6,12 @@ from keras.models import Model
 from keras.utils import plot_model
 from keras import regularizers
 
-def preprocessing(dataframes,batch_size = 32, category=12, interval=10,input_imgs_shape =(64,64), augmentation=True, dropout = 0.2):
+def preprocessing(dataframes,batch_size = 32, category=12, interval=10,input_imgs_shape =(64,64), random_erasing,random_enforcing, dropout = 0.2):
   # category: bin + 2 due to two side
   # interval: age interval
   import imp
   imp.reload(training_utils)
-  return training_utils.img_and_age_data_generator(dataset_df=dataframes,category=category,interval=interval,imgs_shape=input_imgs_shape, batch_size=batch_size,augmentation=augmentation,dropout=dropout)
+  return training_utils.img_and_age_data_generator(dataset_df=dataframes,category=category,interval=interval,imgs_shape=input_imgs_shape, batch_size=batch_size,random_erasing=random_erasing,random_enforcing=random_enforcing,dropout=dropout)
   
 def white_norm(input): # this is used for normalizing whitish of image, kind of works as increase saturation, contrast & reduce brightness,.... Only included in first layer
   return (input - tf.constant(127.5)) / 128.0
